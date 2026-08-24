@@ -402,7 +402,7 @@ function Genera-TestoReport {
     }
     [void]$sb.AppendLine("")
     
-    [void]$sb.AppendLine("2. STRUTTURA AD ALBERO DELLE REVISIONI E DIPENDENZE:")
+    [void]$sb.AppendLine("2. STRUTTURA AD ALBERO DELLE REVISIONI - DIPENDENZE:")
     foreach ($key in $AlberoDerivazioni.Keys) {
         [void]$sb.AppendLine("$key")
         $derivazioni = $AlberoDerivazioni[$key]
@@ -467,7 +467,7 @@ foreach ($rev in $RevisioniOrdinate) {
 }
 Write-Host ""
 
-Write-Host "2. STRUTTURA AD ALBERO DELLE REVISIONI E DIPENDENZE:" -ForegroundColor Cyan
+Write-Host "2. STRUTTURA AD ALBERO DELLE REVISIONI - DIPENDENZE:" -ForegroundColor Cyan
 foreach ($key in $AlberoDerivazioni.Keys) {
     Write-Host " > $key" -ForegroundColor White
     $derivazioni = $AlberoDerivazioni[$key]

@@ -8,6 +8,7 @@ namespace SVNMergeCheckerUI {
 
         private string _fullReportOutput = string.Empty;
         private CancellationTokenSource? _cts;
+        private string? _btnRunOriginalText;
         private IReadOnlyDictionary<int, RevisionDisplayState> _revisionStates = new Dictionary<int, RevisionDisplayState>();
 
         public Form1() {
@@ -27,6 +28,12 @@ namespace SVNMergeCheckerUI {
             cmbGroupBy.SelectedIndex = 0;
             lblGroupBy.Visible = false;
             cmbGroupBy.Visible = false;
+
+            // Mode selector for ResultType (Standard/Debug)
+            cmbMode.Items.AddRange(new object[] { "Standard", "Debug" });
+            cmbMode.SelectedIndexChanged += cmbMode_SelectedIndexChanged;
+            cmbMode.SelectedIndex = 0; // default = Standard
+            ApplyModeToResultType();
 
             txtOutFile.Text = @"C:\APSNet\Tempdir\report_svn_checker.txt";
 
@@ -71,7 +78,7 @@ namespace SVNMergeCheckerUI {
         // SVN Connect
         // ----------------------------------------------------------------
         private async void btnSvnConnect_Click(object sender, EventArgs e) {
-            if (!AssertSvnAvailable()) return;
+            if (!await AssertSvnAvailable()) return;
 
             SetActionButtons(false);
             rtbOutput.Clear();
@@ -95,7 +102,7 @@ namespace SVNMergeCheckerUI {
         // SVN Update
         // ----------------------------------------------------------------
         private async void btnSvnUpdate_Click(object sender, EventArgs e) {
-            if (!AssertSvnAvailable()) return;
+            if (!await AssertSvnAvailable()) return;
 
             SetActionButtons(false);
             rtbOutput.Clear();
@@ -187,12 +194,48 @@ namespace SVNMergeCheckerUI {
             RenderOutput(cmbResultType.SelectedItem?.ToString() ?? "Elenco Revisioni");
         }
 
+        private void cmbMode_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            ApplyModeToResultType();
+        }
+
+        private void ApplyModeToResultType()
+        {
+            var current = cmbResultType.SelectedItem?.ToString();
+
+            var items = new List<string>
+            {
+                "Elenco Revisioni",
+                "Albero Dipendenze",
+                "File Coinvolti"
+            };
+
+            if (cmbMode.SelectedItem?.ToString() == "Debug")
+            {
+                items.Add("Log Console");
+                items.Add("Script output");
+            }
+
+            cmbResultType.BeginUpdate();
+            try
+            {
+                cmbResultType.Items.Clear();
+                foreach (var it in items) cmbResultType.Items.Add(it);
+
+                if (current != null && items.Contains(current))
+                    cmbResultType.SelectedItem = current;
+                else
+                    cmbResultType.SelectedIndex = 0;
+            }
+            finally { cmbResultType.EndUpdate(); }
+        }
+
         // ----------------------------------------------------------------
         // Run Analysis
         // ----------------------------------------------------------------
         private async void btnRun_Click(object sender, EventArgs e) {
             if (!ValidateInputs()) return;
-            if (!AssertSvnAvailable()) return;
+            if (!await AssertSvnAvailable()) return;
 
             SetActionButtons(false);
             progressBar.Style = ProgressBarStyle.Marquee;
@@ -203,6 +246,16 @@ namespace SVNMergeCheckerUI {
             _cts = new CancellationTokenSource();
 
             var progress = new Progress<string>(line => AppendOutput(line));
+
+            // Trasforma temporaneamente il pulsante Avvia in pulsante Annulla
+            try {
+                _btnRunOriginalText = btnRun.Text;
+                // SetActionButtons(false) ha disabilitato anche btnRun: riabilitiamolo
+                btnRun.Enabled = true;
+                btnRun.Text = "✖ Annulla";
+                btnRun.Click -= btnRun_Click;
+                btnRun.Click += btnCancel_Click;
+            } catch { }
 
             // Costruisce l'insieme di revisioni da saltare:
             // revisioni digitate dall'utente nel campo SkipRevisions.
@@ -250,7 +303,7 @@ namespace SVNMergeCheckerUI {
                 var resultType = cmbResultType.SelectedItem?.ToString() ?? "Elenco Revisioni";
                 RenderOutput(resultType);
             } catch (OperationCanceledException) {
-                AppendOutput("\n[ANALISI ANNULLATA]");
+                AppendOutput("[ANALISI ANNULLATA]");
             } catch (Exception ex) {
                 MessageBox.Show($"Errore durante l'esecuzione:\n{ex.Message}", "Errore", MessageBoxButtons.OK, MessageBoxIcon.Error);
             } finally {
@@ -259,6 +312,16 @@ namespace SVNMergeCheckerUI {
                 progressBar.Visible = false;
                 progressBar.Style = ProgressBarStyle.Blocks;
                 SetActionButtons(true);
+
+                // Ripristina il pulsante Run al comportamento originale se necessario
+                try {
+                    if (_btnRunOriginalText is not null) {
+                        btnRun.Click -= btnCancel_Click;
+                        btnRun.Click += btnRun_Click;
+                        btnRun.Text = _btnRunOriginalText;
+                        _btnRunOriginalText = null;
+                    }
+                } catch { }
             }
         }
 
@@ -275,8 +338,8 @@ namespace SVNMergeCheckerUI {
             return true;
         }
 
-        private bool AssertSvnAvailable() {
-            if (_svnService.IsSvnAvailable()) return true;
+        private async Task<bool> AssertSvnAvailable() {
+            if (await _svnService.IsSvnAvailableAsync()) return true;
             MessageBox.Show(
                 "svn.exe non trovato nel PATH.\nInstalla Subversion e assicurati che sia incluso nel PATH di sistema.",
                 "SVN non disponibile", MessageBoxButtons.OK, MessageBoxIcon.Error);
@@ -288,6 +351,30 @@ namespace SVNMergeCheckerUI {
             btnSvnUpdate.Enabled = enabled;
             btnLoadConfig.Enabled = enabled;
             btnSvnConnect.Enabled = enabled;
+        }
+
+        private void btnCancel_Click(object? sender, EventArgs e) {
+            rtbOutput.SuspendLayout();
+            rtbOutput.Clear();
+
+            AppendOutput("[ANNULLAMENTO AVVIATO...]");
+            try { _cts?.Cancel(); } catch { }
+
+            // Ripristina immediatamente il pulsante Run
+            try {
+                if (_btnRunOriginalText is not null) {
+                    btnRun.Click -= btnCancel_Click;
+                    btnRun.Click += btnRun_Click;
+                    btnRun.Text = _btnRunOriginalText;
+                    _btnRunOriginalText = null;
+                }
+            } catch { }
+
+            try {
+                SetActionButtons(true);
+                progressBar.Visible = false;
+                progressBar.Style = ProgressBarStyle.Blocks;
+            } catch { }
         }
 
         private void AppendOutput(string text) {
@@ -324,38 +411,6 @@ namespace SVNMergeCheckerUI {
             cmbResultType.SelectedIndex = idx >= 0 ? idx : 0;
         }
 
-        private async Task<string> BuildEffectiveSkipRevisionsAsync(IProgress<string> progress) {
-            // Parse user-supplied skip revisions (ignore non-numeric tokens)
-            var userTokens = txtSkipRevisions.Text
-                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                .Where(t => int.TryParse(t, out _))
-                .Select(int.Parse)
-                .ToHashSet();
-
-            // Fetch already-merged revisions from SVN
-            try {
-                var wcPath = txtWorkingCopy.Text.Trim();
-                var srcPath = txtSourceRepo.Text.Trim();
-
-                if (!string.IsNullOrWhiteSpace(wcPath) && !string.IsNullOrWhiteSpace(srcPath)) {
-                    // Resolve the source to a URL if it is a local path
-                    var sourceUrl = await _svnService.GetSvnUrlAsync(srcPath) ?? srcPath;
-
-                    progress.Report("[INFO] Recupero revisioni già mergiate (svn mergeinfo)...");
-                    var mergedRevs = await _svnService.GetMergedRevisionsAsync(sourceUrl, wcPath);
-                    foreach (var r in mergedRevs)
-                        userTokens.Add(r);
-
-                    progress.Report($"[INFO] Revisioni già mergiate trovate: {mergedRevs.Count}. " +
-                                    $"Skip totali da passare allo script: {userTokens.Count}.");
-                }
-            } catch (Exception ex) {
-                progress.Report($"[WARN] Impossibile recuperare le revisioni mergiate: {ex.Message}");
-            }
-
-            return string.Join(",", userTokens.OrderBy(r => r));
-        }
-
         private void RenderOutput(string resultType) {
             rtbOutput.SuspendLayout();
             rtbOutput.Clear();
@@ -373,14 +428,6 @@ namespace SVNMergeCheckerUI {
             }
 
             rtbOutput.ResumeLayout();
-        }
-
-        private static IReadOnlySet<int> ParseSkipRevisionSet(string skipRevisions) {
-            var set = new HashSet<int>();
-            foreach (var token in skipRevisions.Split(' ', StringSplitOptions.RemoveEmptyEntries))
-                if (int.TryParse(token, out var rev))
-                    set.Add(rev);
-            return set;
         }
 
         // Colore e simbolo unico per ciascuno dei 4 stati di visualizzazione delle revisioni.
@@ -615,41 +662,5 @@ namespace SVNMergeCheckerUI {
             rtbOutput.AppendText($"{indent}{prefix}{marker} {NormalizeRevisionText(revText)}" + Environment.NewLine);
         }
 
-        private static IReadOnlySet<int> ParseMergedRevisionsFromScriptOutput(string output) {
-            var set = new HashSet<int>();
-            if (string.IsNullOrWhiteSpace(output)) return set;
-
-            // The PS script emits exactly one line: ##MERGED_REVISIONS:<n1>,<n2>,...
-            const string marker = "##MERGED_REVISIONS:";
-            foreach (var rawLine in output.Split('\n')) {
-                var line = rawLine.Trim();
-                if (!line.StartsWith(marker, StringComparison.Ordinal)) continue;
-
-                var vals = line.Substring(marker.Length);
-                foreach (var token in vals.Split(',',
-                    StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-                    if (int.TryParse(token, out var rev))
-                        set.Add(rev);
-
-                break;
             }
-            return set;
         }
-
-        private static string? FindScriptPath() {
-            var scriptName = "svn_predictive_merge_checker.ps1";
-            var appDir = AppContext.BaseDirectory;
-            var candidate = Path.Combine(appDir, scriptName);
-            if (File.Exists(candidate)) return candidate;
-
-            // Walk up to find it in the repository script folder
-            var dir = new DirectoryInfo(appDir);
-            while (dir != null) {
-                var found = Directory.GetFiles(dir.FullName, scriptName, SearchOption.AllDirectories).FirstOrDefault();
-                if (found != null) return found;
-                dir = dir.Parent;
-            }
-            return null;
-        }
-    }
-}

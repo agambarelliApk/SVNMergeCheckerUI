@@ -39,6 +39,8 @@
             txtConfigLabel = new TextBox();
             btnSaveConfig = new Button();
             btnLoadConfig = new Button();
+            lblMode = new Label();
+            cmbMode = new ComboBox();
             grpElaborazioni = new GroupBox();
             grpParametri = new GroupBox();
             lblIssues = new Label();
@@ -184,6 +186,8 @@
             grpConfig.Controls.Add(txtConfigLabel);
             grpConfig.Controls.Add(btnSaveConfig);
             grpConfig.Controls.Add(btnLoadConfig);
+            grpConfig.Controls.Add(lblMode);
+            grpConfig.Controls.Add(cmbMode);
             grpConfig.Location = new Point(514, 12);
             grpConfig.Name = "grpConfig";
             grpConfig.Size = new Size(358, 166);
@@ -223,6 +227,22 @@
             btnLoadConfig.TabIndex = 3;
             btnLoadConfig.Text = "Carica Config";
             btnLoadConfig.Click += btnLoadConfig_Click;
+            // 
+            // lblMode
+            // 
+            lblMode.Location = new Point(8, 105);
+            lblMode.Name = "lblMode";
+            lblMode.Size = new Size(70, 20);
+            lblMode.TabIndex = 4;
+            lblMode.Text = "Modalità:";
+            // 
+            // cmbMode
+            // 
+            cmbMode.DropDownStyle = ComboBoxStyle.DropDownList;
+            cmbMode.Location = new Point(82, 101);
+            cmbMode.Name = "cmbMode";
+            cmbMode.Size = new Size(120, 27);
+            cmbMode.TabIndex = 5;
             // 
             // grpElaborazioni
             // 
@@ -486,6 +506,7 @@
         private TextBox txtConfigLabel;
         private Button btnSaveConfig;
         private Button btnLoadConfig;
+        private Label lblMode;
 
         // Elaborazioni section
         private GroupBox grpElaborazioni;
@@ -508,6 +529,7 @@
         // Run section
         private GroupBox grpRun;
         private Button btnRun;
+        private ComboBox cmbMode;
         private ProgressBar progressBar;
 
         // Result section

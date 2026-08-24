@@ -1,5 +1,4 @@
 using System.Text;
-using System.Text;
 using System.Text.RegularExpressions;
 
 namespace SVNMergeCheckerUI
@@ -16,7 +15,7 @@ namespace SVNMergeCheckerUI
     {
         // Header markers exactly as produced by the PowerShell script
         private const string Header1 = "1. ELENCO COMPLETO REVISIONI ORDINATO";
-        private const string Header2 = "2. STRUTTURA AD ALBERO DELLE REVISIONI E DIPENDENZE";
+        private const string Header2 = "2. STRUTTURA AD ALBERO DELLE REVISIONI - DIPENDENZE";
         private const string Header3 = "3. FILE COINVOLTI PER OGNI REVISIONE DA MERGIARE";
 
         // Matches a revision number anywhere in a line: r12345 or bare 12345 at start

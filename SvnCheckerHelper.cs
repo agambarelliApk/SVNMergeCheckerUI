@@ -85,8 +85,8 @@ namespace SVNMergeCheckerUI {
             if (!string.IsNullOrWhiteSpace(p.OutFile)) {
                 try {
                     await File.WriteAllTextAsync(p.OutFile, reportText, Encoding.UTF8, ct);
-                    progress.Report($"\n\n\n\n" +                                               "===============================================================================================================================================================" +
-                        "\n[OK] Report salvato in: {p.OutFile}");
+                    progress.Report("\n\n\n\n" +                                               "===============================================================================================================================================================" +
+                        $"\n[OK] Report salvato in: {p.OutFile}");                    
                 } catch {
                     progress.Report("Non è stato possible salvare il file di report./nVerificare l'esistenza e l'accessibilità del percorso ");
                 }
@@ -446,21 +446,28 @@ namespace SVNMergeCheckerUI {
             } catch { return null; }
         }
 
-        private static Task<string?> RunSvnRawAsync(string[] args, CancellationToken ct) {
-            return Task.Run(() => {
-                var psi = new System.Diagnostics.ProcessStartInfo(
-                    "svn",
-                    string.Join(" ", args.Select(a => a.Contains(' ') ? $"\"{a}\"" : a))) {
-                    UseShellExecute = false,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    CreateNoWindow = true
-                };
-                using var proc = System.Diagnostics.Process.Start(psi)!;
-                var output = proc.StandardOutput.ReadToEnd();
-                proc.WaitForExit();
-                return proc.ExitCode == 0 ? output : null;
-            }, ct);
+        private static async Task<string?> RunSvnRawAsync(string[] args, CancellationToken ct) {
+            var psi = new System.Diagnostics.ProcessStartInfo(
+                "svn",
+                string.Join(" ", args.Select(a => a.Contains(' ') ? $"\"{a}\"" : a))) {
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true
+            };
+            using var proc = System.Diagnostics.Process.Start(psi)!;
+
+            var outputTask = proc.StandardOutput.ReadToEndAsync(ct);
+
+            try {
+                await proc.WaitForExitAsync(ct);
+            } catch (OperationCanceledException) {
+                try { proc.Kill(entireProcessTree: true); } catch { /* ignored */ }
+                throw;
+            }
+
+            var output = await outputTask;
+            return proc.ExitCode == 0 ? output : null;
         }
     }
 }

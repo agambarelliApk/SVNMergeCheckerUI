@@ -13,13 +13,9 @@ Legenda priorità:
 
 ## 1. Refactoring dell'asincronia (chiamate SVN che bloccano la UI)
 
-- ?? **`SvnService.IsSvnAvailable()` (righe 19-39) è completamente sincrono** e usa
-  `p.WaitForExit(5000)` bloccante. Viene invocato da `Form1.AssertSvnAvailable()` (righe 277-283),
-  chiamato a sua volta in testa a `btnSvnConnect_Click`, `btnSvnUpdate_Click`, `btnRun_Click`
-  (tutti `async void`) **prima di qualsiasi `await`**: il thread UI resta bloccato fino a 5 secondi
-  ad ogni avvio di operazione se `svn.exe` è lento a rispondere. **Fix**: rendere `IsSvnAvailable`
-  asincrono (`Task<bool> IsSvnAvailableAsync()`, `WaitForExitAsync`) e aggiornare i 3 handler in
-  `Form1.cs` per usare `await`.
+- [x] **`SvnService.IsSvnAvailable()` (righe 19-39) reso asincrono** — ora `IsSvnAvailableAsync()` usa
+  `WaitForExitAsync()` con timeout e termina il processo in caso di timeout. Aggiornati gli handler in
+  `Form1.cs` per `await`-are la chiamata. (Completato: 2026-08-24 00:00:00)
 - ?? **`SvnService.RunSvnAsync` (righe 110-128) e `SvnCheckerHelper.RunSvnRawAsync` (righe 449-464)**
   usano il pattern `Task.Run(() => { ...; p.WaitForExit(); ... })`: liberano il thread UI ma occupano
   un thread del pool in blocking-wait e **non rispettano la cancellazione del processo figlio** — il
@@ -64,6 +60,14 @@ Legenda priorità:
     non istanziati/usati in `Form1`: valutare se il flusso "script PowerShell" sia ancora un requisito
     attivo o se vada rimosso, per evitare di mantenere due implementazioni parallele della stessa
     logica (`SvnCheckerHelper` in C# vs `script/svn_predictive_merge_checker.ps1`).
+- [x] **Pulizia codice morto (sessione di verifica dedicata)** — riverifica puntuale confermata,
+  rimosso in un'unica passata (Completato: 2026-08-24, build validata):
+  - `Form1.cs`: rimossi i metodi `ParseMergedRevisionsFromScriptOutput`, `FindScriptPath`,
+    `BuildEffectiveSkipRevisionsAsync`, `ParseSkipRevisionSet` (nessuna chiamata residua nel progetto).
+  - `RevisionMergeInfo.cs`: file rimosso interamente (`IPowerShellRunnerService` +
+    `PowerShellRunnerService`), non iniettato né istanziato.
+  - `ReportParserService.cs`: rimossa la riga duplicata `using System.Text;`.
+  - ? Completed and validated on 2026-08-24
 - ?? **Introdurre un layer di validazione input centralizzato**: oggi `ValidateInputs()` (righe
   267-275) valida solo issue/revisioni; la validazione di percorsi (`txtWorkingCopy`, `txtSourceRepo`)
   e del campo numerico avviene implicitamente altrove o per nulla. Centralizzare in un servizio/metodo
@@ -74,6 +78,15 @@ Legenda priorità:
   testabilità (constructor injection per tutti i collaboratori).
 - ?? **Estrarre in un piccolo helper/ViewModel la costruzione di `SvnCheckerParameters`**
   (righe 208-234), oggi costruita inline nel click handler leggendo direttamente i controlli WinForms.
+
+ - ?? **Aggiungere modalità Config (`cmbMode`) per il caricamento di `cmbResultType` (Standard/Debug)**
+   - Inserire in `Form1` nella sezione Config un `ComboBox` `cmbMode` con voci `Standard`, `Debug`.
+   - `Standard`: nasconde le voci `Log Console` e `Script output` in `cmbResultType`.
+   - `Debug`: mostra tutte le voci incluse `Log Console` e `Script output`.
+   - Implementazione proposta: ricostruire gli items di `cmbResultType` in base alla modalità ad ogni cambio
+     di `cmbMode`, mantenendo le altre opzioni invariate. Default = `Standard`.
+   - Fornire: inizializzazione di `cmbMode` in `Form1()` e gestore `cmbMode_SelectedIndexChanged` che chiama
+     un metodo `ApplyModeToResultType()` per aggiornare gli items.
 
 ## 3. Unit test per il parser e per i servizi
 

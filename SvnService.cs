@@ -4,7 +4,7 @@ namespace SVNMergeCheckerUI
 {
     public interface ISvnService
     {
-        bool IsSvnAvailable();
+        Task<bool> IsSvnAvailableAsync();
         Task<string?> GetSvnUrlAsync(string pathOrUrl);
         Task<string> UpdateDirectoryAsync(string path);
         /// <summary>
@@ -16,7 +16,7 @@ namespace SVNMergeCheckerUI
 
     public class SvnService : ISvnService
     {
-        public bool IsSvnAvailable()
+        public async Task<bool> IsSvnAvailableAsync()
         {
             try
             {
@@ -29,7 +29,14 @@ namespace SVNMergeCheckerUI
                     CreateNoWindow = true
                 };
                 p.Start();
-                p.WaitForExit(5000);
+
+                var exitTask = p.WaitForExitAsync();
+                var completed = await Task.WhenAny(exitTask, Task.Delay(5000)) == exitTask;
+                if (!completed)
+                {
+                    try { p.Kill(entireProcessTree: true); } catch { }
+                    return false;
+                }
                 return p.ExitCode == 0;
             }
             catch
@@ -54,7 +61,7 @@ namespace SVNMergeCheckerUI
 
             // It's a local path: run svn info to extract the URL
             var (output, _, exitCode) = await RunSvnAsync(
-                new[] { "info", "--show-item", "url", pathOrUrl });
+                new[] { "info", "--show-item", "url", pathOrUrl }, CancellationToken.None);
 
             if (exitCode != 0 || string.IsNullOrWhiteSpace(output))
                 return null;
@@ -78,7 +85,7 @@ namespace SVNMergeCheckerUI
             if (!Directory.Exists(path))
                 return $"[SKIP] Il percorso '{path}' non esiste sul file system.";
 
-            var (output, error, exitCode) = await RunSvnAsync(new[] { "update", path });
+            var (output, error, exitCode) = await RunSvnAsync(new[] { "update", path }, CancellationToken.None);
 
             if (exitCode != 0)
                 return $"[ERRORE] svn update fallito:\n{error}";
@@ -93,7 +100,7 @@ namespace SVNMergeCheckerUI
                 return result;
 
             var (output, _, exitCode) = await RunSvnAsync(
-                new[] { "mergeinfo", "--show-revs", "merged", sourceUrl, targetPath });
+                new[] { "mergeinfo", "--show-revs", "merged", sourceUrl, targetPath }, CancellationToken.None);
 
             if (exitCode != 0 || string.IsNullOrWhiteSpace(output))
                 return result;
@@ -107,24 +114,34 @@ namespace SVNMergeCheckerUI
             return result;
         }
 
-        private static Task<(string output, string error, int exitCode)> RunSvnAsync(string[] args)
+        private static async Task<(string output, string error, int exitCode)> RunSvnAsync(string[] args, CancellationToken ct)
         {
-            return Task.Run(() =>
+            using var p = new Process();
+            p.StartInfo = new ProcessStartInfo("svn", string.Join(" ", args.Select(a => a.Contains(' ') ? $"\"{a}\"" : a)))
             {
-                using var p = new Process();
-                p.StartInfo = new ProcessStartInfo("svn", string.Join(" ", args.Select(a => a.Contains(' ') ? $"\"{a}\"" : a)))
-                {
-                    UseShellExecute = false,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    CreateNoWindow = true
-                };
-                p.Start();
-                var output = p.StandardOutput.ReadToEnd();
-                var error = p.StandardError.ReadToEnd();
-                p.WaitForExit();
-                return (output, error, p.ExitCode);
-            });
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true
+            };
+            p.Start();
+
+            var outputTask = p.StandardOutput.ReadToEndAsync(ct);
+            var errorTask = p.StandardError.ReadToEndAsync(ct);
+
+            try
+            {
+                await p.WaitForExitAsync(ct);
+            }
+            catch (OperationCanceledException)
+            {
+                try { p.Kill(entireProcessTree: true); } catch { /* ignored */ }
+                throw;
+            }
+
+            var output = await outputTask;
+            var error = await errorTask;
+            return (output, error, p.ExitCode);
         }
     }
 }

@@ -60,3 +60,35 @@ project exists.
 - Keep `script/svn_predictive_merge_checker.ps1` as source of truth for merge-analysis logic.
 - Preserve the `##MERGED_REVISIONS:...` marker convention and existing section headers when modifying report
   generation or parsing.
+
+## Workflow Directive for Task Management
+When the user asks to work on the project or says "prossimo task":
+1. ALWAYS read `TASKS.md` first to find the highest priority unchecked item (`- [ ]`).
+2. Cross-reference the code files mentioned in that task (e.g., SvnService.cs).
+3. Apply the coding standards defined in this file (async over sync, separate concerns).
+4. After generating the code changes, explicitly remind the user: "Task completato? Se sì, dimmi 'aggiorna task' per spuntare la checkbox."
+5. When the user confirms, generate the updated `TASKS.md` content with `- [x]` replacing `- [ ]` for that specific line and add a short comment with the changes's timestamp.
+
+## Strict Confirmation, Validation & Autonomous Build Protocol
+**CRITICAL**: You MUST NEVER apply code changes directly without confirmation. You MUST NEVER mark tasks as done (`- [x]`) without a successful validation (build + tests).
+Follow this **5-step workflow**:
+1. **Propose (Code)**: Identify the task. Draft the exact code changes (diff or code block) in the chat. Explain the rationale.
+2. **Confirm (Apply Code)**: Ask: *"Do you approve this code? Shall I apply it?"* 
+   - ONLY apply the code to the project files after explicit user confirmation (e.g., "Yes", "Apply").
+3. **Autonomous Validation Attempt (The Build & Test Phase)**:
+   - After applying the code, **DO NOT** update `TASKS.md` yet.
+   - Suggest the exact terminal commands to validate the change. Example: 
+     > *"To validate this fix, please run the following commands in the terminal and paste the output here:* 
+     > `dotnet build` 
+     > `dotnet test --filter "FullyQualifiedName~SvnServiceTest"` *"*
+   - **If the user pastes the terminal output**: Analyze it. Look for "Build succeeded" and "Passed!".
+     - If **successful**: Proceed to step 4.
+     - If **failed**: Do NOT proceed. Show the error, propose a fix, and go back to Step 1 (Propose a fix).
+   - **If the user explicitly says "I have executed the tests and they are green"**: Accept this as manual validation and proceed to step 4.
+4. **Validation Confirmation**: Explicitly state: 
+   > *"? Validation successful (Build passed / Tests passed). Task is effectively completed."*
+5. **Update TASKS.md (Final Step)**:
+   - ONLY now, change the task checkbox from `- [ ]` to `- [x]`.
+   - Add a completion note: `- ? Completed and validated on [date]`.
+   - Propose the updated `TASKS.md` content to the user and ask: *"Shall I apply this update to TASKS.md?"*
+   - Apply the update only after receiving explicit consent for this specific file change.
