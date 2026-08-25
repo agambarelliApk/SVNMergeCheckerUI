@@ -24,9 +24,17 @@ Legenda priorità:
 - [x] **`Process.WaitForExit()`/`ReadToEnd()` sincroni già sostituiti** — entrambi i metodi usano
   `WaitForExitAsync()` + `ReadToEndAsync(ct)`, nessun wrapper `Task.Run` presente.
   (Completato: 2026-08-24)
-- ?? **Verificare l'uso di `ct.ThrowIfCancellationRequested()`** nei cicli di `SvnCheckerHelper`
-  (es. `FindRevisionsByIssuesAsync` riga 120, `AnalyzeDependenciesAsync`): la cancellazione oggi
-  interrompe il ciclo C# ma — per il punto precedente — non il processo SVN già avviato in quel momento.
+- [x] **`ct.ThrowIfCancellationRequested()` verificato + fix propagazione `CancellationToken` mancante**
+  — verifica end-to-end completata: i cicli di `SvnCheckerHelper` (`FindRevisionsByIssuesAsync`,
+  `LoadManualRevisionsAsync`, `AnalyzeDependenciesAsync`) chiamano già `ct.ThrowIfCancellationRequested()`
+  e `RunSvnRawAsync` killa correttamente il processo su cancellazione. Trovato però un bug reale: 
+  `ISvnService.GetSvnUrlAsync`/`GetMergedRevisionsAsync` non accettavano `CancellationToken` ed erano
+  invocati internamente con `CancellationToken.None`, quindi la cancellazione utente non killava il
+  processo `svn.exe` se in corso durante queste due chiamate (usate in testa a
+  `SvnCheckerHelper.RunAsync`). Fix applicato: aggiunto parametro opzionale `CancellationToken ct = default`
+  a entrambi i metodi in `ISvnService`/`SvnService`, propagato fino a `RunSvnAsync`; `SvnCheckerHelper.RunAsync`
+  ora passa il proprio `ct` in entrambe le chiamate. Build validata.
+  (Completato: 2026-08-24, build validata)
 - ?? **Aggiungere timeout configurabili** per le chiamate a `svn.exe` (oggi solo `IsSvnAvailable` ha un
   timeout esplicito di 5000ms; le altre chiamate in `RunSvnAsync`/`RunSvnRawAsync` non hanno timeout e
   possono bloccare indefinitamente in caso di prompt di autenticazione interattiva, nonostante
@@ -75,14 +83,11 @@ Legenda priorità:
 - ?? **Estrarre in un piccolo helper/ViewModel la costruzione di `SvnCheckerParameters`**
   (righe 208-234), oggi costruita inline nel click handler leggendo direttamente i controlli WinForms.
 
- - ?? **Aggiungere modalità Config (`cmbMode`) per il caricamento di `cmbResultType` (Standard/Debug)**
-   - Inserire in `Form1` nella sezione Config un `ComboBox` `cmbMode` con voci `Standard`, `Debug`.
-   - `Standard`: nasconde le voci `Log Console` e `Script output` in `cmbResultType`.
-   - `Debug`: mostra tutte le voci incluse `Log Console` e `Script output`.
-   - Implementazione proposta: ricostruire gli items di `cmbResultType` in base alla modalità ad ogni cambio
-     di `cmbMode`, mantenendo le altre opzioni invariate. Default = `Standard`.
-   - Fornire: inizializzazione di `cmbMode` in `Form1()` e gestore `cmbMode_SelectedIndexChanged` che chiama
-     un metodo `ApplyModeToResultType()` per aggiornare gli items.
+ - [x] **Modalità Config (`cmbMode`) per il caricamento di `cmbResultType` (Standard/Debug)** —
+   riverifica puntuale: `cmbMode` è inizializzato in `Form1()` (righe 32-35) con voci `Standard`/`Debug`,
+   `cmbMode_SelectedIndexChanged` (riga 196) chiama `ApplyModeToResultType()` (righe 200-225) che
+   ricostruisce gli items di `cmbResultType` mostrando `Log Console`/`Script output` solo in modalità
+   Debug. Default = `Standard`. (Verificato: 2026-08-24, già implementato)
 
 ## 3. Unit test per il parser e per i servizi
 

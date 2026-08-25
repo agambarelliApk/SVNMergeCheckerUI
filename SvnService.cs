@@ -5,13 +5,13 @@ namespace SVNMergeCheckerUI
     public interface ISvnService
     {
         Task<bool> IsSvnAvailableAsync();
-        Task<string?> GetSvnUrlAsync(string pathOrUrl);
+        Task<string?> GetSvnUrlAsync(string pathOrUrl, CancellationToken ct = default);
         Task<string> UpdateDirectoryAsync(string path);
         /// <summary>
         /// Returns the list of revisions already merged from <paramref name="sourceUrl"/> into <paramref name="targetPath"/>
         /// by running: svn mergeinfo --show-revs merged &lt;sourceUrl&gt; &lt;targetPath&gt;
         /// </summary>
-        Task<List<int>> GetMergedRevisionsAsync(string sourceUrl, string targetPath);
+        Task<List<int>> GetMergedRevisionsAsync(string sourceUrl, string targetPath, CancellationToken ct = default);
     }
 
     public class SvnService : ISvnService
@@ -45,7 +45,7 @@ namespace SVNMergeCheckerUI
             }
         }
 
-        public async Task<string?> GetSvnUrlAsync(string pathOrUrl)
+        public async Task<string?> GetSvnUrlAsync(string pathOrUrl, CancellationToken ct = default)
         {
             if (string.IsNullOrWhiteSpace(pathOrUrl))
                 return null;
@@ -61,7 +61,7 @@ namespace SVNMergeCheckerUI
 
             // It's a local path: run svn info to extract the URL
             var (output, _, exitCode) = await RunSvnAsync(
-                new[] { "info", "--show-item", "url", pathOrUrl }, CancellationToken.None);
+                new[] { "info", "--show-item", "url", pathOrUrl }, ct);
 
             if (exitCode != 0 || string.IsNullOrWhiteSpace(output))
                 return null;
@@ -93,14 +93,14 @@ namespace SVNMergeCheckerUI
             return $"[OK] svn update completato:\n{output}";
         }
 
-        public async Task<List<int>> GetMergedRevisionsAsync(string sourceUrl, string targetPath)
+        public async Task<List<int>> GetMergedRevisionsAsync(string sourceUrl, string targetPath, CancellationToken ct = default)
         {
             var result = new List<int>();
             if (string.IsNullOrWhiteSpace(sourceUrl) || string.IsNullOrWhiteSpace(targetPath))
                 return result;
 
             var (output, _, exitCode) = await RunSvnAsync(
-                new[] { "mergeinfo", "--show-revs", "merged", sourceUrl, targetPath }, CancellationToken.None);
+                new[] { "mergeinfo", "--show-revs", "merged", sourceUrl, targetPath }, ct);
 
             if (exitCode != 0 || string.IsNullOrWhiteSpace(output))
                 return result;

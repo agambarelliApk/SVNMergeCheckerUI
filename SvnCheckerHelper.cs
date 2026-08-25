@@ -16,7 +16,7 @@ namespace SVNMergeCheckerUI {
             IProgress<string> progress,
             CancellationToken ct = default) {
             // 1. Resolve URL repository sorgente
-            var repoUrl = await _svn.GetSvnUrlAsync(p.SourceRepository)
+            var repoUrl = await _svn.GetSvnUrlAsync(p.SourceRepository, ct)
                           ?? throw new InvalidOperationException(
                               $"Impossibile recuperare l'URL dalla sorgente '{p.SourceRepository}'.");
 
@@ -48,7 +48,7 @@ namespace SVNMergeCheckerUI {
 
             // 4. Revisioni già mergiate (svn mergeinfo + SkipRevisions)
             progress.Report("\n[-] Confronto con le revisioni già mergiate...");
-            var merged = await _svn.GetMergedRevisionsAsync(repoUrl, p.WorkingCopy);
+            var merged = await _svn.GetMergedRevisionsAsync(repoUrl, p.WorkingCopy, ct);
             var mergedSet = new HashSet<int>(merged);
             foreach (var s in p.SkipRevisions) mergedSet.Add(s);
 
