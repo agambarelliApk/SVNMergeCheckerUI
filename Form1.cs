@@ -656,6 +656,7 @@ namespace SVNMergeCheckerUI {
             rtbOutput.SelectionColor = color;
             rtbOutput.AppendText($"{indent}{prefix}{marker} {NormalizeRevisionText(revText)}" + Environment.NewLine);
         }
-      
+        
     }
 }
+
