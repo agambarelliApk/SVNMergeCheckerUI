@@ -49,6 +49,8 @@
             txtRevisions = new TextBox();
             lblMaxNewRevs = new Label();
             numMaxNewRevs = new NumericUpDown();
+            lblSvnTimeout = new Label();
+            numSvnTimeout = new NumericUpDown();
             grpOutputCfg = new GroupBox();
             lblOutFile = new Label();
             txtOutFile = new TextBox();
@@ -67,6 +69,7 @@
             grpElaborazioni.SuspendLayout();
             grpParametri.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)numMaxNewRevs).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)numSvnTimeout).BeginInit();
             grpOutputCfg.SuspendLayout();
             grpRun.SuspendLayout();
             grpResult.SuspendLayout();
@@ -248,6 +251,8 @@
             grpParametri.Controls.Add(txtRevisions);
             grpParametri.Controls.Add(lblMaxNewRevs);
             grpParametri.Controls.Add(numMaxNewRevs);
+            grpParametri.Controls.Add(lblSvnTimeout);
+            grpParametri.Controls.Add(numSvnTimeout);
             grpParametri.Location = new Point(8, 16);
             grpParametri.Name = "grpParametri";
             grpParametri.Size = new Size(440, 157);
@@ -324,6 +329,25 @@
             numMaxNewRevs.Size = new Size(100, 26);
             numMaxNewRevs.TabIndex = 5;
             numMaxNewRevs.Value = new decimal(new int[] { 500, 0, 0, 0 });
+            // 
+            // lblSvnTimeout
+            // 
+            lblSvnTimeout.Location = new Point(190, 90);
+            lblSvnTimeout.Name = "lblSvnTimeout";
+            lblSvnTimeout.Size = new Size(110, 20);
+            lblSvnTimeout.TabIndex = 6;
+            lblSvnTimeout.Text = "Timeout SVN (s):";
+            // 
+            // numSvnTimeout
+            // 
+            numSvnTimeout.Location = new Point(304, 88);
+            numSvnTimeout.Maximum = new decimal(new int[] { 600, 0, 0, 0 });
+            numSvnTimeout.Minimum = new decimal(new int[] { 5, 0, 0, 0 });
+            numSvnTimeout.Increment = new decimal(new int[] { 5, 0, 0, 0 });
+            numSvnTimeout.Name = "numSvnTimeout";
+            numSvnTimeout.Size = new Size(80, 26);
+            numSvnTimeout.TabIndex = 7;
+            numSvnTimeout.Value = new decimal(new int[] { 60, 0, 0, 0 });
             // 
             // grpOutputCfg
             // 
@@ -479,6 +503,7 @@
             grpParametri.ResumeLayout(false);
             grpParametri.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)numMaxNewRevs).EndInit();
+            ((System.ComponentModel.ISupportInitialize)numSvnTimeout).EndInit();
             grpOutputCfg.ResumeLayout(false);
             grpOutputCfg.PerformLayout();
             grpRun.ResumeLayout(false);
@@ -516,6 +541,8 @@
         private TextBox txtRevisions;
         private Label lblMaxNewRevs;
         private NumericUpDown numMaxNewRevs;
+        private Label lblSvnTimeout;
+        private NumericUpDown numSvnTimeout;
         private GroupBox grpOutputCfg;
         private Label lblOutFile;
         private TextBox txtOutFile;

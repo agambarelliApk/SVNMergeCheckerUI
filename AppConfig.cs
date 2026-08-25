@@ -14,6 +14,7 @@ namespace SVNMergeCheckerUI
         public int MaxNewRevs { get; set; } = 500;
         public string OutFile { get; set; } = string.Empty;
         public string ResultType { get; set; } = "Script output";
+        public int SvnTimeoutSeconds { get; set; } = 60;
     }
 
     public interface IConfigService

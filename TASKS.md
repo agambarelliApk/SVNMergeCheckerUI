@@ -35,10 +35,23 @@ Legenda priorità:
   a entrambi i metodi in `ISvnService`/`SvnService`, propagato fino a `RunSvnAsync`; `SvnCheckerHelper.RunAsync`
   ora passa il proprio `ct` in entrambe le chiamate. Build validata.
   (Completato: 2026-08-24, build validata)
-- ?? **Aggiungere timeout configurabili** per le chiamate a `svn.exe` (oggi solo `IsSvnAvailable` ha un
-  timeout esplicito di 5000ms; le altre chiamate in `RunSvnAsync`/`RunSvnRawAsync` non hanno timeout e
-  possono bloccare indefinitamente in caso di prompt di autenticazione interattiva, nonostante
-  `UseShellExecute = false`).
+ - [x] **Aggiungere timeout configurabili** per le chiamate a `svn.exe` (oggi solo `IsSvnAvailable` ha un
+   timeout esplicito di 5000ms; le altre chiamate in `RunSvnAsync`/`RunSvnRawAsync` non hanno timeout e
+   possono bloccare indefinitamente in caso di prompt di autenticazione interattiva, nonostante
+   `UseShellExecute = false`).
+  - [x] **Codice**: aggiunto `DefaultSvnTimeoutMs` (60000ms) + `CancellationTokenSource.CreateLinkedTokenSource`
+    in `SvnService.RunSvnAsync` e `SvnCheckerHelper.RunSvnRawAsync`; allo scadere del timeout il processo
+    viene killato e viene lanciata una `TimeoutException` (distinta dalla `OperationCanceledException` di
+    cancellazione utente). Build validata.
+  - [x] **GUI**: esposto il timeout come impostazione configurabile dall'utente (non solo costante nel
+    codice), persistito in `AppConfig`/`svn_config.json` tramite `IConfigService` (nuovo campo
+    `SvnTimeoutSeconds`, default 60) e gestito da un nuovo controllo `NumericUpDown numSvnTimeout`
+    (5-600s, step 5) in `Form1` (`grpParametri`, `Form1.Designer.cs`). Il valore è propagato come
+    parametro opzionale a `ISvnService`/`SvnService` (`GetSvnUrlAsync`/`UpdateDirectoryAsync`/
+    `GetMergedRevisionsAsync`) e a `SvnCheckerHelper.RunAsync` (via `SvnCheckerParameters.SvnTimeoutSeconds`)
+    invece della costante `DefaultSvnTimeoutMs` fissa; letto/scritto in `BuildConfig`/`ApplyConfig` e usato
+    in `btnSvnConnect_Click`/`btnSvnUpdate_Click`/`btnRun_Click`.
+    - ? Completed and validated on 2026-08-25
 
 ## 2. Separazione della logica di business dalla UI
 

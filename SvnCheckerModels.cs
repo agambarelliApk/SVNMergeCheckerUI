@@ -7,7 +7,8 @@ namespace SVNMergeCheckerUI
         IReadOnlyList<int> Revisions,
         IReadOnlySet<int> SkipRevisions,
         int MaxNewRevs,
-        string? OutFile
+        string? OutFile,
+        int SvnTimeoutSeconds = 60
     );
 
     // Stati di visualizzazione a 4 valori:

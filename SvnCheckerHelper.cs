@@ -6,6 +6,10 @@ namespace SVNMergeCheckerUI {
     public class SvnCheckerHelper {
         private readonly ISvnService _svn;
 
+        // Timeout di default (ms) per le chiamate a svn.exe senza timeout esplicito.
+        // TODO: rendere configurabile da AppConfig/GUI (vedi TASKS.md).
+        private const int DefaultSvnTimeoutMs = 60_000;
+
         public SvnCheckerHelper(ISvnService svn) => _svn = svn;
 
         // ----------------------------------------------------------------
@@ -15,8 +19,10 @@ namespace SVNMergeCheckerUI {
             SvnCheckerParameters p,
             IProgress<string> progress,
             CancellationToken ct = default) {
+            var timeoutMs = p.SvnTimeoutSeconds > 0 ? p.SvnTimeoutSeconds * 1000 : DefaultSvnTimeoutMs;
+
             // 1. Resolve URL repository sorgente
-            var repoUrl = await _svn.GetSvnUrlAsync(p.SourceRepository, ct)
+            var repoUrl = await _svn.GetSvnUrlAsync(p.SourceRepository, ct, timeoutMs)
                           ?? throw new InvalidOperationException(
                               $"Impossibile recuperare l'URL dalla sorgente '{p.SourceRepository}'.");
 
@@ -25,9 +31,9 @@ namespace SVNMergeCheckerUI {
             var toProcess = new List<int>();
 
             if (p.Issues.Count > 0)
-                await FindRevisionsByIssuesAsync(p.Issues, repoUrl, p.MaxNewRevs, details, toProcess, progress, ct);
+                await FindRevisionsByIssuesAsync(p.Issues, repoUrl, p.MaxNewRevs, details, toProcess, progress, ct, timeoutMs);
             else
-                await LoadManualRevisionsAsync(p.Revisions, repoUrl, p.MaxNewRevs, details, toProcess, progress, ct);
+                await LoadManualRevisionsAsync(p.Revisions, repoUrl, p.MaxNewRevs, details, toProcess, progress, ct, timeoutMs);
 
             if (toProcess.Count == 0) {
                 progress.Report("[!] Nessuna revisione da elaborare.");
@@ -44,11 +50,11 @@ namespace SVNMergeCheckerUI {
 
             await AnalyzeDependenciesAsync(
                 toProcess, tree, processedFiles, details,
-                repoUrl, searchMinDate, p.MaxNewRevs, progress, ct);
+                repoUrl, searchMinDate, p.MaxNewRevs, progress, ct, timeoutMs);
 
             // 4. Revisioni già mergiate (svn mergeinfo + SkipRevisions)
             progress.Report("\n[-] Confronto con le revisioni già mergiate...");
-            var merged = await _svn.GetMergedRevisionsAsync(repoUrl, p.WorkingCopy, ct);
+            var merged = await _svn.GetMergedRevisionsAsync(repoUrl, p.WorkingCopy, ct, timeoutMs);
             var mergedSet = new HashSet<int>(merged);
             foreach (var s in p.SkipRevisions) mergedSet.Add(s);
 
@@ -111,9 +117,10 @@ namespace SVNMergeCheckerUI {
             Dictionary<int, RevisionInfo> details,
             List<int> toProcess,
             IProgress<string> progress,
-            CancellationToken ct) {
+            CancellationToken ct,
+            int timeoutMs) {
             progress.Report("[-] Scansione log per identificare le issue...");
-            var xml = await RunSvnXmlAsync(new[] { "log", "-l", "500", "--xml", repoUrl }, ct);
+            var xml = await RunSvnXmlAsync(new[] { "log", "-l", "500", "--xml", repoUrl }, ct, timeoutMs);
             if (xml is null) return;
 
             foreach (XmlElement entry in xml.SelectNodes("/log/logentry")!) {
@@ -145,11 +152,12 @@ namespace SVNMergeCheckerUI {
             Dictionary<int, RevisionInfo> details,
             List<int> toProcess,
             IProgress<string> progress,
-            CancellationToken ct) {
+            CancellationToken ct,
+            int timeoutMs) {
             progress.Report("[-] Recupero dettagli revisioni manuali...");
             foreach (var rev in revisions) {
                 ct.ThrowIfCancellationRequested();
-                var xml = await RunSvnXmlAsync(new[] { "log", "-c", rev.ToString(), "--xml", repoUrl }, ct);
+                var xml = await RunSvnXmlAsync(new[] { "log", "-c", rev.ToString(), "--xml", repoUrl }, ct, timeoutMs);
                 if (xml is null) continue;
 
                 var entry = xml.SelectSingleNode("/log/logentry") as XmlElement;
@@ -175,7 +183,8 @@ namespace SVNMergeCheckerUI {
             DateTime searchMinDate,
             int maxRevs,
             IProgress<string> progress,
-            CancellationToken ct) {
+            CancellationToken ct,
+            int timeoutMs) {
             var diffSummaryRe = new Regex(@"^[ADMR]\s+(.+)$", RegexOptions.Compiled);
             progress.Report($"  [DEBUG] repoUrl usato per diff: '{repoUrl}'");
 
@@ -185,7 +194,7 @@ namespace SVNMergeCheckerUI {
                 progress.Report($"[-] Analisi file modificati nella revisione {rev}...");
 
                 var diffRaw = await RunSvnRawAsync(
-                    new[] { "diff", "--summarize", "-c", rev.ToString(), repoUrl }, ct);
+                    new[] { "diff", "--summarize", "-c", rev.ToString(), repoUrl }, ct, timeoutMs);
 
                 var filesInRev = new List<string>();
                 foreach (var line in (diffRaw ?? string.Empty).Split('\n')) {
@@ -214,7 +223,7 @@ namespace SVNMergeCheckerUI {
                         : $"{repoUrl.TrimEnd('/')}/{file.TrimStart('/')}";
 
                     var fileLogXml = await RunSvnXmlAsync(
-                        new[] { "log", "--xml", $"{fileUrl}@{rev}" }, ct);
+                        new[] { "log", "--xml", $"{fileUrl}@{rev}" }, ct, timeoutMs);
                     if (fileLogXml is null) continue;
 
                     foreach (XmlElement entry in fileLogXml.SelectNodes("/log/logentry")!) {
@@ -436,8 +445,8 @@ namespace SVNMergeCheckerUI {
             toProcess.Add(rev);
         }
 
-        private static async Task<XmlDocument?> RunSvnXmlAsync(string[] args, CancellationToken ct) {
-            var raw = await RunSvnRawAsync(args, ct);
+        private static async Task<XmlDocument?> RunSvnXmlAsync(string[] args, CancellationToken ct, int timeoutMs = DefaultSvnTimeoutMs) {
+            var raw = await RunSvnRawAsync(args, ct, timeoutMs);
             if (string.IsNullOrWhiteSpace(raw)) return null;
             try {
                 var doc = new XmlDocument();
@@ -446,7 +455,7 @@ namespace SVNMergeCheckerUI {
             } catch { return null; }
         }
 
-        private static async Task<string?> RunSvnRawAsync(string[] args, CancellationToken ct) {
+        private static async Task<string?> RunSvnRawAsync(string[] args, CancellationToken ct, int timeoutMs = DefaultSvnTimeoutMs) {
             var psi = new System.Diagnostics.ProcessStartInfo(
                 "svn",
                 string.Join(" ", args.Select(a => a.Contains(' ') ? $"\"{a}\"" : a))) {
@@ -459,11 +468,17 @@ namespace SVNMergeCheckerUI {
 
             var outputTask = proc.StandardOutput.ReadToEndAsync(ct);
 
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            timeoutCts.CancelAfter(timeoutMs);
+
             try {
-                await proc.WaitForExitAsync(ct);
-            } catch (OperationCanceledException) {
+                await proc.WaitForExitAsync(timeoutCts.Token);
+            } catch (OperationCanceledException) when (ct.IsCancellationRequested) {
                 try { proc.Kill(entireProcessTree: true); } catch { /* ignored */ }
                 throw;
+            } catch (OperationCanceledException) {
+                try { proc.Kill(entireProcessTree: true); } catch { /* ignored */ }
+                throw new TimeoutException($"Il comando 'svn {string.Join(" ", args)}' non ha risposto entro {timeoutMs} ms.");
             }
 
             var output = await outputTask;

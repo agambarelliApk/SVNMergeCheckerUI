@@ -83,8 +83,9 @@ namespace SVNMergeCheckerUI {
             SetActionButtons(false);
             rtbOutput.Clear();
             try {
-                var wcUrl = await _svnService.GetSvnUrlAsync(txtWorkingCopy.Text.Trim());
-                var srcUrl = await _svnService.GetSvnUrlAsync(txtSourceRepo.Text.Trim());
+                var timeoutMs = (int)numSvnTimeout.Value * 1000;
+                var wcUrl = await _svnService.GetSvnUrlAsync(txtWorkingCopy.Text.Trim(), timeoutMs: timeoutMs);
+                var srcUrl = await _svnService.GetSvnUrlAsync(txtSourceRepo.Text.Trim(), timeoutMs: timeoutMs);
 
                 var sb = new System.Text.StringBuilder();
                 sb.AppendLine("[SVN Connect]");
@@ -107,8 +108,9 @@ namespace SVNMergeCheckerUI {
             SetActionButtons(false);
             rtbOutput.Clear();
             try {
-                var wcResult = await _svnService.UpdateDirectoryAsync(txtWorkingCopy.Text.Trim());
-                var srcResult = await _svnService.UpdateDirectoryAsync(txtSourceRepo.Text.Trim());
+                var timeoutMs = (int)numSvnTimeout.Value * 1000;
+                var wcResult = await _svnService.UpdateDirectoryAsync(txtWorkingCopy.Text.Trim(), timeoutMs);
+                var srcResult = await _svnService.UpdateDirectoryAsync(txtSourceRepo.Text.Trim(), timeoutMs);
 
                 AppendOutput("[SVN Update - Working Copy]\n" + wcResult);
                 AppendOutput("\n[SVN Update - Source Repo]\n" + srcResult);
@@ -279,7 +281,8 @@ namespace SVNMergeCheckerUI {
                 Revisions: manualRevisions,
                 SkipRevisions: skipSet,
                 MaxNewRevs: (int)numMaxNewRevs.Value,
-                OutFile: txtOutFile.Text.Trim()
+                OutFile: txtOutFile.Text.Trim(),
+                SvnTimeoutSeconds: (int)numSvnTimeout.Value
             );
 
             try {
@@ -390,7 +393,8 @@ namespace SVNMergeCheckerUI {
             SkipRevisions = txtSkipRevisions.Text.Trim(),
             MaxNewRevs = (int)numMaxNewRevs.Value,
             OutFile = txtOutFile.Text.Trim(),
-            ResultType = cmbResultType.SelectedItem?.ToString() ?? "Elenco Revisioni"
+            ResultType = cmbResultType.SelectedItem?.ToString() ?? "Elenco Revisioni",
+            SvnTimeoutSeconds = (int)numSvnTimeout.Value
         };
 
         private void ApplyConfig(AppConfig cfg) {
@@ -401,6 +405,7 @@ namespace SVNMergeCheckerUI {
             //txtRevisions.Text      = cfg.Revisions;
             txtSkipRevisions.Text = cfg.SkipRevisions;
             numMaxNewRevs.Value = Math.Clamp(cfg.MaxNewRevs, (int)numMaxNewRevs.Minimum, (int)numMaxNewRevs.Maximum);
+            numSvnTimeout.Value = Math.Clamp(cfg.SvnTimeoutSeconds > 0 ? cfg.SvnTimeoutSeconds : 60, (int)numSvnTimeout.Minimum, (int)numSvnTimeout.Maximum);
             txtOutFile.Text = cfg.OutFile;
             var idx = cmbResultType.Items.IndexOf(cfg.ResultType);
             cmbResultType.SelectedIndex = idx >= 0 ? idx : 0;
