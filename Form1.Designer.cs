@@ -32,8 +32,6 @@
             btnBrowseSourceRepo = new Button();
             btnSvnConnect = new Button();
             btnSvnUpdate = new Button();
-            lblSkipRevisions = new Label();
-            txtSkipRevisions = new TextBox();
             grpConfig = new GroupBox();
             lblConfigLabel = new Label();
             txtConfigLabel = new TextBox();
@@ -43,6 +41,8 @@
             cmbMode = new ComboBox();
             grpElaborazioni = new GroupBox();
             grpParametri = new GroupBox();
+            lblSkipRevisions = new Label();
+            txtSkipRevisions = new TextBox();
             lblIssues = new Label();
             txtIssues = new TextBox();
             lblRevisions = new Label();
@@ -83,11 +83,9 @@
             grpDirectory.Controls.Add(btnBrowseSourceRepo);
             grpDirectory.Controls.Add(btnSvnConnect);
             grpDirectory.Controls.Add(btnSvnUpdate);
-            grpDirectory.Controls.Add(lblSkipRevisions);
-            grpDirectory.Controls.Add(txtSkipRevisions);
             grpDirectory.Location = new Point(8, 8);
             grpDirectory.Name = "grpDirectory";
-            grpDirectory.Size = new Size(500, 170);
+            grpDirectory.Size = new Size(500, 140);
             grpDirectory.TabIndex = 0;
             grpDirectory.TabStop = false;
             grpDirectory.Text = "📁 Directory";
@@ -162,23 +160,6 @@
             btnSvnUpdate.Text = "SVN Update";
             btnSvnUpdate.Click += btnSvnUpdate_Click;
             // 
-            // lblSkipRevisions
-            // 
-            lblSkipRevisions.Location = new Point(8, 132);
-            lblSkipRevisions.Name = "lblSkipRevisions";
-            lblSkipRevisions.Size = new Size(100, 20);
-            lblSkipRevisions.TabIndex = 8;
-            lblSkipRevisions.Text = "Skip Revisions:";
-            // 
-            // txtSkipRevisions
-            // 
-            txtSkipRevisions.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
-            txtSkipRevisions.Location = new Point(112, 130);
-            txtSkipRevisions.Name = "txtSkipRevisions";
-            txtSkipRevisions.PlaceholderText = "(Opzionale) es. 284490, 284715";
-            txtSkipRevisions.Size = new Size(377, 26);
-            txtSkipRevisions.TabIndex = 9;
-            // 
             // grpConfig
             // 
             grpConfig.Anchor = AnchorStyles.Top | AnchorStyles.Right;
@@ -190,7 +171,7 @@
             grpConfig.Controls.Add(cmbMode);
             grpConfig.Location = new Point(514, 12);
             grpConfig.Name = "grpConfig";
-            grpConfig.Size = new Size(358, 166);
+            grpConfig.Size = new Size(358, 136);
             grpConfig.TabIndex = 1;
             grpConfig.TabStop = false;
             grpConfig.Text = "⚙️ Config";
@@ -249,9 +230,9 @@
             grpElaborazioni.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             grpElaborazioni.Controls.Add(grpParametri);
             grpElaborazioni.Controls.Add(grpOutputCfg);
-            grpElaborazioni.Location = new Point(8, 184);
+            grpElaborazioni.Location = new Point(8, 154);
             grpElaborazioni.Name = "grpElaborazioni";
-            grpElaborazioni.Size = new Size(882, 160);
+            grpElaborazioni.Size = new Size(882, 177);
             grpElaborazioni.TabIndex = 2;
             grpElaborazioni.TabStop = false;
             grpElaborazioni.Text = "🔄 Elaborazioni";
@@ -259,6 +240,8 @@
             // grpParametri
             // 
             grpParametri.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            grpParametri.Controls.Add(lblSkipRevisions);
+            grpParametri.Controls.Add(txtSkipRevisions);
             grpParametri.Controls.Add(lblIssues);
             grpParametri.Controls.Add(txtIssues);
             grpParametri.Controls.Add(lblRevisions);
@@ -267,10 +250,28 @@
             grpParametri.Controls.Add(numMaxNewRevs);
             grpParametri.Location = new Point(8, 16);
             grpParametri.Name = "grpParametri";
-            grpParametri.Size = new Size(440, 130);
+            grpParametri.Size = new Size(440, 157);
             grpParametri.TabIndex = 0;
             grpParametri.TabStop = false;
             grpParametri.Text = "Parametri";
+            // 
+            // lblSkipRevisions
+            // 
+            lblSkipRevisions.Font = new Font("Segoe UI", 9F);
+            lblSkipRevisions.Location = new Point(5, 124);
+            lblSkipRevisions.Name = "lblSkipRevisions";
+            lblSkipRevisions.Size = new Size(72, 20);
+            lblSkipRevisions.TabIndex = 10;
+            lblSkipRevisions.Text = "Revs  skip:";
+            // 
+            // txtSkipRevisions
+            // 
+            txtSkipRevisions.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            txtSkipRevisions.Location = new Point(80, 121);
+            txtSkipRevisions.Name = "txtSkipRevisions";
+            txtSkipRevisions.PlaceholderText = "(Opzionale) es. 284490, 284715";
+            txtSkipRevisions.Size = new Size(344, 26);
+            txtSkipRevisions.TabIndex = 11;
             // 
             // lblIssues
             // 
@@ -336,7 +337,7 @@
             grpOutputCfg.Controls.Add(cmbGroupBy);
             grpOutputCfg.Location = new Point(456, 16);
             grpOutputCfg.Name = "grpOutputCfg";
-            grpOutputCfg.Size = new Size(418, 160);
+            grpOutputCfg.Size = new Size(418, 157);
             grpOutputCfg.TabIndex = 1;
             grpOutputCfg.TabStop = false;
             grpOutputCfg.Text = "Output";
@@ -408,7 +409,7 @@
             grpRun.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             grpRun.Controls.Add(btnRun);
             grpRun.Controls.Add(progressBar);
-            grpRun.Location = new Point(8, 350);
+            grpRun.Location = new Point(8, 337);
             grpRun.Name = "grpRun";
             grpRun.Size = new Size(882, 56);
             grpRun.TabIndex = 3;
@@ -438,9 +439,9 @@
             // 
             grpResult.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
             grpResult.Controls.Add(rtbOutput);
-            grpResult.Location = new Point(8, 412);
+            grpResult.Location = new Point(8, 399);
             grpResult.Name = "grpResult";
-            grpResult.Size = new Size(882, 344);
+            grpResult.Size = new Size(882, 357);
             grpResult.TabIndex = 4;
             grpResult.TabStop = false;
             grpResult.Text = "📊 Risultato";
@@ -452,7 +453,7 @@
             rtbOutput.Location = new Point(8, 18);
             rtbOutput.Name = "rtbOutput";
             rtbOutput.ReadOnly = true;
-            rtbOutput.Size = new Size(862, 314);
+            rtbOutput.Size = new Size(862, 327);
             rtbOutput.TabIndex = 0;
             rtbOutput.Text = "";
             rtbOutput.WordWrap = false;
@@ -497,8 +498,6 @@
         private Button btnBrowseSourceRepo;
         private Button btnSvnConnect;
         private Button btnSvnUpdate;
-        private Label lblSkipRevisions;
-        private TextBox txtSkipRevisions;
 
         // Config section
         private GroupBox grpConfig;
@@ -535,5 +534,7 @@
         // Result section
         private GroupBox grpResult;
         private RichTextBox rtbOutput;
+        private Label lblSkipRevisions;
+        private TextBox txtSkipRevisions;
     }
 }
