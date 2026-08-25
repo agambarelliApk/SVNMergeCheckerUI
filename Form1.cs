@@ -194,13 +194,11 @@ namespace SVNMergeCheckerUI {
             RenderOutput(cmbResultType.SelectedItem?.ToString() ?? "Elenco Revisioni");
         }
 
-        private void cmbMode_SelectedIndexChanged(object sender, EventArgs e)
-        {
+        private void cmbMode_SelectedIndexChanged(object sender, EventArgs e) {
             ApplyModeToResultType();
         }
 
-        private void ApplyModeToResultType()
-        {
+        private void ApplyModeToResultType() {
             var current = cmbResultType.SelectedItem?.ToString();
 
             var items = new List<string>
@@ -210,15 +208,13 @@ namespace SVNMergeCheckerUI {
                 "File Coinvolti"
             };
 
-            if (cmbMode.SelectedItem?.ToString() == "Debug")
-            {
+            if (cmbMode.SelectedItem?.ToString() == "Debug") {
                 items.Add("Log Console");
                 items.Add("Script output");
             }
 
             cmbResultType.BeginUpdate();
-            try
-            {
+            try {
                 cmbResultType.Items.Clear();
                 foreach (var it in items) cmbResultType.Items.Add(it);
 
@@ -226,8 +222,7 @@ namespace SVNMergeCheckerUI {
                     cmbResultType.SelectedItem = current;
                 else
                     cmbResultType.SelectedIndex = 0;
-            }
-            finally { cmbResultType.EndUpdate(); }
+            } finally { cmbResultType.EndUpdate(); }
         }
 
         // ----------------------------------------------------------------
@@ -460,7 +455,7 @@ namespace SVNMergeCheckerUI {
 
                 // If there was no leading marker, prepend the symbol
                 if (!displayed.Trim().StartsWith("> " + symbol + " "))
-                    displayed = "> " +   symbol + " " + displayed.TrimStart();
+                    displayed = "> " + symbol + " " + displayed.TrimStart();
 
                 // Remove the leading 'r' from the revision number right after the symbol (es. "r12345" -> "12345")
                 displayed = System.Text.RegularExpressions.Regex.Replace(
@@ -661,6 +656,6 @@ namespace SVNMergeCheckerUI {
             rtbOutput.SelectionColor = color;
             rtbOutput.AppendText($"{indent}{prefix}{marker} {NormalizeRevisionText(revText)}" + Environment.NewLine);
         }
-
-            }
-        }
+      
+    }
+}

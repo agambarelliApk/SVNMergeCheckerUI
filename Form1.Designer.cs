@@ -369,7 +369,7 @@
             // 
             // lblResultType
             // 
-            lblResultType.Location = new Point(8, 60);
+            lblResultType.Location = new Point(8, 58);
             lblResultType.Name = "lblResultType";
             lblResultType.Size = new Size(80, 20);
             lblResultType.TabIndex = 3;
@@ -390,7 +390,7 @@
             lblGroupBy.Name = "lblGroupBy";
             lblGroupBy.Size = new Size(80, 20);
             lblGroupBy.TabIndex = 5;
-            lblGroupBy.Text = "Modalità:";
+            lblGroupBy.Text = "  Vedi per:";
             lblGroupBy.Visible = false;
             // 
             // cmbGroupBy
