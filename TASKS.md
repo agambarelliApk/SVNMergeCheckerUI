@@ -16,18 +16,14 @@ Legenda priorità:
 - [x] **`SvnService.IsSvnAvailable()` (righe 19-39) reso asincrono** — ora `IsSvnAvailableAsync()` usa
   `WaitForExitAsync()` con timeout e termina il processo in caso di timeout. Aggiornati gli handler in
   `Form1.cs` per `await`-are la chiamata. (Completato: 2026-08-24 00:00:00)
-- ?? **`SvnService.RunSvnAsync` (righe 110-128) e `SvnCheckerHelper.RunSvnRawAsync` (righe 449-464)**
-  usano il pattern `Task.Run(() => { ...; p.WaitForExit(); ... })`: liberano il thread UI ma occupano
-  un thread del pool in blocking-wait e **non rispettano la cancellazione del processo figlio** — il
-  `CancellationToken` passato a `Task.Run` interrompe solo l'attesa lato `Task`, non invia `Kill()` al
-  processo `svn.exe` reale, che può continuare a girare in background. Confrontare con l'implementazione
-  corretta già presente in `PowerShellRunnerService.RunAsync` (righe 73-88: `WaitForExitAsync(ct)` +
-  `catch (OperationCanceledException) { process.Kill(entireProcessTree: true); }`) e allineare
-  `SvnService`/`SvnCheckerHelper` allo stesso pattern.
-- ?? **Sostituire `Process.WaitForExit()`/`ReadToEnd()` sincroni con `WaitForExitAsync()` +
-  `ReadToEndAsync()`** in tutti i punti che usano `Task.Run` come wrapper (`SvnService.RunSvnAsync`,
-  `SvnCheckerHelper.RunSvnRawAsync`), eliminando la necessità stessa del `Task.Run` e liberando un
-  thread del pool per ogni chiamata SVN concorrente.
+- [x] **`SvnService.RunSvnAsync` e `SvnCheckerHelper.RunSvnRawAsync` allineati al pattern corretto** —
+  riverifica puntuale sul codice sorgente attuale: entrambi i metodi usano già `await p.WaitForExitAsync(ct)`
+  con `catch (OperationCanceledException) { p.Kill(entireProcessTree: true); throw; }` (nessun `Task.Run`
+  con `WaitForExit()` sincrono residuo). Pattern coerente con `PowerShellRunnerService.RunAsync`.
+  (Completato: 2026-08-24, nessuna modifica di codice necessaria)
+- [x] **`Process.WaitForExit()`/`ReadToEnd()` sincroni già sostituiti** — entrambi i metodi usano
+  `WaitForExitAsync()` + `ReadToEndAsync(ct)`, nessun wrapper `Task.Run` presente.
+  (Completato: 2026-08-24)
 - ?? **Verificare l'uso di `ct.ThrowIfCancellationRequested()`** nei cicli di `SvnCheckerHelper`
   (es. `FindRevisionsByIssuesAsync` riga 120, `AnalyzeDependenciesAsync`): la cancellazione oggi
   interrompe il ciclo C# ma — per il punto precedente — non il processo SVN già avviato in quel momento.
