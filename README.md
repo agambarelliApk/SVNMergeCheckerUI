@@ -13,6 +13,7 @@
 - [Avvio rapido / Utilizzo](#avvio-rapido--utilizzo)
 - [Configurazione](#configurazione)
 - [Esecuzione dei test](#esecuzione-dei-test)
+- [Documentazione test](#documentazione-test)
 - [Come contribuire](#come-contribuire)
 - [Licenza](#licenza)
 
@@ -108,16 +109,20 @@ Flusso tipico di utilizzo dalla UI:
 
 ## Esecuzione dei test
 
-Il progetto non include attualmente un progetto di test automatizzato dedicato. Per validare le modifiche si
-raccomanda di:
+La solution include un progetto di test dedicato: `SVNMergeCheckerUI.Tests`.
+
+Per eseguire i test automatici:
 
 ```powershell
-dotnet build SVNMergeCheckerUI.csproj
+dotnet test SVNMergeCheckerUI.Tests/SVNMergeCheckerUI.Tests.csproj
 ```
 
-e di eseguire test manuali tramite l'interfaccia grafica su un repository SVN di prova, verificando in particolare
-i tre flussi principali: ricerca per issue, inserimento manuale delle revisioni e rilevamento delle revisioni già
-mergiate.
+Il progetto di test copre attualmente il parsing dei report tramite `ReportParserServiceTests`.
+Per validare le modifiche al comportamento complessivo dell'applicazione, resta utile affiancare anche una verifica manuale tramite l'interfaccia grafica su un repository SVN di prova.
+
+## Documentazione test
+
+Per l'elenco aggiornato dei test presenti nel workspace e il loro scopo, consultare `TESTS.md`.
 
 ## Come contribuire
 

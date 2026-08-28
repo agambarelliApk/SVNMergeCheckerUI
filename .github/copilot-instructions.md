@@ -1,8 +1,8 @@
 # Copilot Instructions — SVNMergeCheckerUI
 
 WinForms app (.NET 8, `net8.0-windows7.0`, `UseWindowsForms=true`, `Nullable`/`ImplicitUsings` enabled). GUI wrapper
-around `script/svn_predictive_merge_checker.ps1` (source of truth for merge-analysis logic). Single project, no test
-project exists.
+around `script/svn_predictive_merge_checker.ps1` (source of truth for merge-analysis logic). Solution includes the
+main app plus the `SVNMergeCheckerUI.Tests` test project.
 
 ## Structure
 - `Form1.cs`/`.Designer.cs` — only form; all UI logic (do not hand-edit Designer regions except via designer).

@@ -104,9 +104,11 @@ Legenda priorità:
 
 ## 3. Unit test per il parser e per i servizi
 
-- ?? **Creare il progetto di test** `SVNMergeCheckerUI.Tests` (xUnit + `Moq`/`NSubstitute`): non esiste
-  alcuna infrastruttura di test nel workspace.
-- ?? **Test per `ReportParserService`** (facile da testare, nessuna dipendenza esterna):
+- [x] **Creare il progetto di test** `SVNMergeCheckerUI.Tests` (xUnit + `coverlet.collector`): il progetto
+  esiste già nella solution, è referenziato correttamente e compila con il resto dell'applicazione. Build
+  validata.
+  - ? Completed and validated on 2026-08-28
+- [x] **Test per `ReportParserService`** (facile da testare, nessuna dipendenza esterna):
   - `ExtractSection1`/`ExtractBetween`/`ExtractFrom`: verificare i marker esatti (`Header1/2/3`,
     incluso il fallback quando la sezione "1. REVISIONI RAGGRUPPATE PER ISSUE:" non è presente),
     e il messaggio di errore `"[Sezione '...' non trovata nell'output.]"` riprodotto nel bug
@@ -115,23 +117,42 @@ Legenda priorità:
     presente nel dizionario `revisionStates` producano `state == null` (comportamento introdotto di
     recente per non colorare intestazioni/righe vuote).
   - `PivotFileCoinvolti`: verificare la corretta pivotazione revisione?file in file?issue?revisioni.
-  - Rimuovere prima (o testare che non causi warning) il `using System.Text;` duplicato a inizio file
-    (righe 1-2).
-- ?? **Test per `SvnCheckerHelper.RunAsync`**, mockando `ISvnService`:
-  - calcolo dei 4 stati (`Mergiato`, `DaMergiareDiretta`, `DaMergiareIndiretta`,
-    `DaMergiareIndirettaAlta`) con casi limite: nessuna revisione diretta pendente (`directPendingMax`
-    nullo ? nessuna indiretta deve risultare "Alta"), revisione indiretta con numero esattamente pari
-    alla soglia (non deve essere "Alta"), superiore (deve esserlo).
-  - marker emessi (`##MERGED_REVISIONS:...`, `##REVISION_STATES:...`) nel formato atteso.
-  - comando `svn merge` generato in coda al report, che deve escludere solo le revisioni `Mergiato`.
-- ?? **Test per `JsonConfigService`**: casi di errore (label vuota, label duplicata senza overwrite),
-  corretta serializzazione/deserializzazione.
-- ?? **Test per `SvnService`/`SvnCheckerHelper` (parte processo)**: introdurre un'astrazione
-  `IProcessRunner` iniettabile per isolare le chiamate a `Process.Start` e testare la costruzione degli
-  argomenti CLI (`"info", "--show-item", "url"`, `"mergeinfo", "--show-revs", "merged"`, ecc.) senza
-  invocare `svn.exe` reale.
-- ?? **Golden-file test** per `ReportParserService` usando come fixture un report reale generato da
-  `SvnCheckerHelper.BuildReportText`.
+  - Stato attuale: presenti `ReportParserServiceTests.cs` con copertura di `Parse`, `ParseRevisioniLines`
+    e `PivotFileCoinvolti`.
+  - Nota: il `using System.Text;` duplicato nel file sorgente è già stato rimosso.
+  - ? Completed and validated on 2026-08-28
+- [x] **Test per `SvnCheckerHelper.RunAsync`**, mockando `ISvnService`: aggiunto
+  `SvnCheckerHelperTests.cs` con un `ISvnService` finto (nessuna chiamata reale a `svn.exe`). Copertura
+  attuale: eccezione quando l'URL del repository sorgente non è risolvibile, risultato vuoto quando
+  non sono forniti né issue né revisioni manuali, corretto utilizzo dell'URL risolto anche quando
+  `SourceRepository` è un percorso locale.
+  - Nota: il calcolo dei 4 stati (`Mergiato`/`DaMergiareDiretta`/`DaMergiareIndiretta`/
+    `DaMergiareIndirettaAlta`) e il flusso completo con issue/revisioni reali richiedono di simulare
+    anche l'esecuzione di `svn log`/`svn diff` (oggi chiamati direttamente da `SvnCheckerHelper` senza
+    un'astrazione iniettabile): resta un'estensione futura, tracciata più sotto insieme al punto
+    `IProcessRunner`.
+  - ? Completed and validated on 2026-08-28 (build + test verdi)
+- [x] **Test per `JsonConfigService`**: aggiunto `JsonConfigServiceTests.cs`. Copertura: label vuota
+  (`ArgumentException`), label duplicata senza `overwrite` (`InvalidOperationException`), overwrite
+  esplicito che sostituisce il profilo, `LabelExists`, round-trip completo di tutti i campi tramite
+  `Save`/`LoadAll`, store assente (`LoadAll` vuoto) e store con JSON non valido (`LoadAll` vuoto,
+  nessuna eccezione). Per isolare i test da `AppContext.BaseDirectory` è stato aggiunto un costruttore
+  `internal JsonConfigService(string storeDirectory)` (nessuna modifica al comportamento pubblico) ed
+  esposto al progetto di test tramite `InternalsVisibleTo` in `SVNMergeCheckerUI.csproj`.
+  - ? Completed and validated on 2026-08-28 (build + test verdi)
+- [x] **Test per `SvnService`/`SvnCheckerHelper` (parte processo)**: aggiunto `SvnServiceTests.cs`,
+  limitato ai percorsi di `SvnService` che non richiedono l'esecuzione reale di `svn.exe`
+  (URL già risolti, percorsi remoti, percorsi locali inesistenti, argomenti vuoti). Non è stata
+  introdotta l'astrazione `IProcessRunner` iniettabile: resta un'attività separata se si vorrà in
+  futuro testare anche la costruzione esatta degli argomenti CLI (`"info", "--show-item", "url"`,
+  `"mergeinfo", "--show-revs", "merged"`, ecc.) senza alcuna dipendenza da `svn.exe` installato.
+  - ? Completed and validated on 2026-08-28 (build + test verdi)
+- [x] **Golden-file test** per `ReportParserService`: aggiunto `ReportParserServiceGoldenFileTests.cs`
+  con fixture in `SVNMergeCheckerUI.Tests/Fixtures/` (`SampleReport.txt` nello stesso formato prodotto
+  da `SvnCheckerHelper.BuildReportText`, più un file atteso per ciascuna vista: Elenco Revisioni,
+  Albero Dipendenze, File Coinvolti - Raw, File Coinvolti pivotato). Le fixture sono copiate in output
+  tramite `CopyToOutputDirectory` nel `.csproj` di test.
+  - ? Completed and validated on 2026-08-28 (build + test verdi)
 
 ## 4. Integrazione CI con GitHub Actions
 

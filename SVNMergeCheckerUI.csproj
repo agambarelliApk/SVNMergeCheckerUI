@@ -8,4 +8,14 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
 
+  <ItemGroup>
+    <Compile Remove="SVNMergeCheckerUI.Tests\**" />
+    <EmbeddedResource Remove="SVNMergeCheckerUI.Tests\**" />
+    <None Remove="SVNMergeCheckerUI.Tests\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="SVNMergeCheckerUI.Tests" />
+  </ItemGroup>
+
 </Project>

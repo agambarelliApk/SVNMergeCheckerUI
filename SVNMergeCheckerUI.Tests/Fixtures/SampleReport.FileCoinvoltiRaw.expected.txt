@@ -1,0 +1,5 @@
+3. FILE COINVOLTI PER OGNI REVISIONE DA MERGIARE:
+[ISSUE-1]
+> REVISIONE 100:
+  - file_a.cs
+----------------------------------------------------

@@ -1,0 +1,16 @@
+REPORT DI CONSISTENZA FINALE PER MERGE
+
+1. REVISIONI RAGGRUPPATE PER ISSUE:
+  [ISSUE-1]
+     => 100 del 01/01/2024 10:00 [mario] : commit [>]
+
+2. STRUTTURA AD ALBERO DELLE REVISIONI - DIPENDENZE RAGRUPPATE PER ISSUE:
+[ISSUE-1]
+  100
+    > [Nessuna dipendenza trovata]
+
+3. FILE COINVOLTI PER OGNI REVISIONE DA MERGIARE:
+[ISSUE-1]
+> REVISIONE 100:
+  - file_a.cs
+----------------------------------------------------

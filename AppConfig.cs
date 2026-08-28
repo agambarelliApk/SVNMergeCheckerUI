@@ -53,6 +53,15 @@ namespace SVNMergeCheckerUI
             StorePath = Path.Combine(AppContext.BaseDirectory, "svn_config.json");
         }
 
+        /// <summary>
+        /// Consente di specificare esplicitamente la cartella dello store (usato per i test
+        /// automatici, per isolare la persistenza da <c>AppContext.BaseDirectory</c>).
+        /// </summary>
+        internal JsonConfigService(string storeDirectory)
+        {
+            StorePath = Path.Combine(storeDirectory, "svn_config.json");
+        }
+
         public bool LabelExists(string label)
         {
             var store = ReadStore();
