@@ -9,6 +9,8 @@ namespace SVNMergeCheckerUI
         string PivotFileCoinvolti(string section);
         IReadOnlyList<(string line, RevisionDisplayState? state)> ParseRevisioniLines(
             string section, IReadOnlyDictionary<int, RevisionDisplayState> revisionStates);
+        int? ExtractRevisionNumber(string text);
+        string NormalizeRevisionText(string text);
     }
 
     public class ReportParserService : IReportParserService
@@ -21,6 +23,27 @@ namespace SVNMergeCheckerUI
         // Matches a revision number anywhere in a line: r12345 or bare 12345 at start
         private static readonly Regex RevisionPattern =
             new(@"(?<!\d)r?(?<rev>\d{5,7})(?!\d)", RegexOptions.Compiled);
+
+        // Matches a leading 'r' immediately before a digit (es. "r12345" -> "12345")
+        private static readonly Regex LeadingRPattern =
+            new(@"(?i)^\s*r(?=\d)", RegexOptions.Compiled);
+
+        /// <summary>
+        /// Extracts the first revision number found in the given text, or null if none found.
+        /// </summary>
+        public int? ExtractRevisionNumber(string text)
+        {
+            var match = RevisionPattern.Match(text);
+            if (match.Success && int.TryParse(match.Groups["rev"].Value, out var rev))
+                return rev;
+            return null;
+        }
+
+        /// <summary>
+        /// Removes a leading 'r' immediately before a digit (es. "r12345" -> "12345").
+        /// </summary>
+        public string NormalizeRevisionText(string text) =>
+            LeadingRPattern.Replace(text, string.Empty);
 
         public string Parse(string fullReportOutput, string resultType)
         {

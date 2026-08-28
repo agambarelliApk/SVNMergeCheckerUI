@@ -5,6 +5,7 @@ namespace SVNMergeCheckerUI {
         private readonly ISvnService _svnService;
         private readonly IConfigService _configService;
         private readonly IReportParserService _reportParser;
+        private readonly IRevisionRenderingService _revisionRenderingService;
         private readonly SvnCheckerHelper _svnCheckerHelper;
 
         private string _fullReportOutput = string.Empty;
@@ -17,6 +18,7 @@ namespace SVNMergeCheckerUI {
             _svnService = new SvnService();
             _configService = new JsonConfigService();
             _reportParser = new ReportParserService();
+            _revisionRenderingService = new RevisionRenderingService(_reportParser);
             _svnCheckerHelper = new SvnCheckerHelper(_svnService);
 
             cmbResultType.Items.AddRange(new object[]
@@ -423,7 +425,8 @@ namespace SVNMergeCheckerUI {
             } else if (resultType == "File Coinvolti") {
                 var raw = _reportParser.Parse(_fullReportOutput, "File Coinvolti - Raw");
                 var groupBy = cmbGroupBy.SelectedItem?.ToString() ?? "Revisione";
-                RenderFileCoinvoltiGrouped(raw, groupBy);
+                var model = _revisionRenderingService.BuildFileCoinvoltiModel(raw, groupBy, _revisionStates);
+                RenderFileCoinvoltiModel(model);
             } else {
                 rtbOutput.Text = _reportParser.Parse(_fullReportOutput, resultType);
             }
@@ -439,9 +442,6 @@ namespace SVNMergeCheckerUI {
             RevisionDisplayState.DaMergiareIndirettaAlta => (Color.Red, "[X]"),
             _ => (Color.Gray, "[?]")
         };
-
-        private static string NormalizeRevisionText(string text) =>
-            System.Text.RegularExpressions.Regex.Replace(text, @"(?i)^\s*r(?=\d)", string.Empty);
 
         private void RenderRevisioniColoured(IReadOnlyList<(string line, RevisionDisplayState? state)> lines) {
             foreach (var (line, state) in lines) {
@@ -473,196 +473,74 @@ namespace SVNMergeCheckerUI {
             rtbOutput.SelectionColor = rtbOutput.ForeColor;
         }
 
-        private void RenderFileCoinvoltiGrouped(string rawSection, string groupBy) {
-            if (string.IsNullOrWhiteSpace(rawSection)) {
-                rtbOutput.Text = rawSection;
+        private void RenderFileCoinvoltiModel(FileCoinvoltiModel model) {
+            if (model.RootNodes.Count == 0) {
+                rtbOutput.Text = string.Empty;
                 return;
             }
 
-            var revRegex = new System.Text.RegularExpressions.Regex(@"(?<!\d)r?(?<rev>\d{1,7})(?!\d)", System.Text.RegularExpressions.RegexOptions.Compiled);
-
-            // Parsing: identifica blocchi issue e revisioni
-            var issueBlocks = new List<(string issueLabel, List<(string revLabel, List<string> files)> revisions)>();
-            string? currentIssue = null;
-            string? currentRev = null;
-            List<(string revLabel, List<string> files)>? currentIssueRevs = null;
-            List<string>? currentRevFiles = null;
-
-            foreach (var rawLine in rawSection.Split('\n')) {
-                var line = rawLine.TrimEnd('\r');
-                var trimmed = line.TrimStart();
-
-                if (trimmed.StartsWith("[") && trimmed.EndsWith("]")) {
-                    // Salva la revisione pendente prima di chiudere il blocco issue corrente
-                    if (currentRev != null && currentRevFiles != null && currentIssueRevs != null)
-                        currentIssueRevs.Add((currentRev, currentRevFiles));
-
-                    // Salva il blocco issue corrente
-                    if (currentIssue != null && currentIssueRevs != null)
-                        issueBlocks.Add((currentIssue, currentIssueRevs));
-
-                    currentIssue = trimmed;
-                    currentIssueRevs = new List<(string, List<string>)>();
-                    currentRev = null;
-                    currentRevFiles = null;
-                } else if (trimmed.StartsWith(">") && trimmed.Contains("REVISIONE")) {
-                    // Nuova revisione
-                    if (currentRev != null && currentRevFiles != null && currentIssueRevs != null)
-                        currentIssueRevs.Add((currentRev, currentRevFiles));
-
-                    var revText = System.Text.RegularExpressions.Regex.Replace(
-                        trimmed.TrimStart('>', ' ').Trim(),
-                        "(?i)\\bREVISIONE\\b\\s*",
-                        string.Empty).TrimEnd(':', ' ').Trim();
-                    currentRev = NormalizeRevisionText(revText);
-                    currentRevFiles = new List<string>();
-                } else if (trimmed.StartsWith("-") && currentRevFiles != null) {
-                    var file = trimmed.TrimStart('-').Trim();
-                    if (!string.IsNullOrWhiteSpace(file) && !file.StartsWith("Nessun file"))
-                        currentRevFiles.Add(file);
-                }
+            foreach (var node in model.RootNodes) {
+                RenderFileCoinvoltiNode(node);
+                if (node.TrailingBlankLine)
+                    rtbOutput.AppendText(Environment.NewLine);
             }
 
-            // Chiudi ultimo blocco
-            if (currentRev != null && currentRevFiles != null && currentIssueRevs != null)
-                currentIssueRevs.Add((currentRev, currentRevFiles));
-            if (currentIssue != null && currentIssueRevs != null)
-                issueBlocks.Add((currentIssue, currentIssueRevs));
+            rtbOutput.SelectionColor = rtbOutput.ForeColor;
+        }
 
-            // Se non ci sono blocchi issue, fallback al comportamento legacy
-            if (issueBlocks.Count == 0) {
-                RenderFileCoinvoltiGroupedLegacy(rawSection, groupBy, revRegex);
-                return;
-            }
-
-            // Rendering raggruppato per issue
-            if (groupBy == "File") {
-                // Pivot globale: file → (issue → lista revisioni)
-                // Struttura: fileOrder, poi per ogni file: dict issue → list revLabel
-                var fileOrder = new List<string>();
-                // file → lista di (issueLabel, revLabel)
-                var fileToIssueRevs = new Dictionary<string, List<(string issueLabel, string revLabel)>>(StringComparer.OrdinalIgnoreCase);
-
-                foreach (var (issueLabel, revisions) in issueBlocks) {
-                    foreach (var (revLabel, files) in revisions) {
-                        foreach (var file in files) {
-                            if (!fileToIssueRevs.ContainsKey(file)) {
-                                fileToIssueRevs[file] = new List<(string, string)>();
-                                fileOrder.Add(file);
-                            }
-                            fileToIssueRevs[file].Add((issueLabel, revLabel));
-                        }
-                    }
-                }
-
-                foreach (var file in fileOrder) {
-                    // Intestazione documento: "> doc1"
+        private void RenderFileCoinvoltiNode(FileCoinvoltiNode node) {
+            switch (node.Kind) {
+                case FileCoinvoltiNodeKind.FileHeader:
                     rtbOutput.SelectionFont = new Font(rtbOutput.Font, FontStyle.Bold);
                     rtbOutput.SelectionColor = rtbOutput.ForeColor;
-                    rtbOutput.AppendText("> " + file + Environment.NewLine);
+                    rtbOutput.AppendText("> " + node.Label + Environment.NewLine);
                     rtbOutput.SelectionFont = rtbOutput.Font;
+                    foreach (var child in node.Children)
+                        RenderFileCoinvoltiNode(child);
+                    break;
 
-                    // Raggruppa per issue mantenendo l'ordine di prima occorrenza
-                    var issueOrder = new List<string>();
-                    var issueToRevs = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
-                    foreach (var (issueLabel, revLabel) in fileToIssueRevs[file]) {
-                        if (!issueToRevs.ContainsKey(issueLabel)) {
-                            issueToRevs[issueLabel] = new List<string>();
-                            issueOrder.Add(issueLabel);
-                        }
-                        issueToRevs[issueLabel].Add(revLabel);
-                    }
-
-                    foreach (var issueLabel in issueOrder) {
-                        // Etichetta issue: " - [issue1]"
-                        rtbOutput.SelectionFont = new Font(rtbOutput.Font, FontStyle.Bold);
-                        rtbOutput.SelectionColor = Color.DarkBlue;
-                        rtbOutput.AppendText($" {issueLabel}" + Environment.NewLine);
-                        rtbOutput.SelectionFont = rtbOutput.Font;
-                        foreach (var rev in issueToRevs[issueLabel])
-                            AppendRevisionEntry(rev, revRegex, isHeader: true, indent: "    ");
-                    }
-                    rtbOutput.AppendText(Environment.NewLine);
-                }
-            } else {
-                // Modalità Revisione: mostra issue → revisioni → file
-                foreach (var (issueLabel, revisions) in issueBlocks) {
+                case FileCoinvoltiNodeKind.IssueHeaderNested:
                     rtbOutput.SelectionFont = new Font(rtbOutput.Font, FontStyle.Bold);
                     rtbOutput.SelectionColor = Color.DarkBlue;
-                    rtbOutput.AppendText(issueLabel + Environment.NewLine + Environment.NewLine);
+                    rtbOutput.AppendText(node.Label + Environment.NewLine);
                     rtbOutput.SelectionFont = rtbOutput.Font;
+                    foreach (var child in node.Children)
+                        RenderFileCoinvoltiNode(child);
+                    break;
 
-                    foreach (var (revLabel, files) in revisions) {
-                        AppendRevisionEntry(revLabel, revRegex, isHeader: true);
-                        foreach (var file in files) {
-                            rtbOutput.SelectionColor = rtbOutput.ForeColor;
-                            rtbOutput.AppendText("  - " + file + Environment.NewLine);
-                        }
-                    }
-                    rtbOutput.AppendText(Environment.NewLine);
-                }
-            }
-
-            rtbOutput.SelectionColor = rtbOutput.ForeColor;
-        }
-
-        private void RenderFileCoinvoltiGroupedLegacy(string rawSection, string groupBy, System.Text.RegularExpressions.Regex revRegex) {
-            var revToFiles = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
-            var fileToRevs = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
-            var revOrder = new List<string>();
-            var fileOrder = new List<string>();
-
-            string? currentRev = null;
-            foreach (var rawLine in rawSection.Split('\n')) {
-                var line = rawLine.TrimEnd('\r');
-                var trimmed = line.TrimStart();
-                if (trimmed.StartsWith(">")) {
-                    var revText = System.Text.RegularExpressions.Regex.Replace(trimmed.TrimStart('>', ' ').Trim(), "(?i)\\bREVISIONE\\b\\s*", string.Empty).TrimEnd(':', ' ').Trim();
-                    currentRev = NormalizeRevisionText(revText);
-                    if (!revToFiles.ContainsKey(currentRev)) { revToFiles[currentRev] = new List<string>(); revOrder.Add(currentRev); }
-                } else if (trimmed.StartsWith("-") && currentRev is not null) {
-                    var file = trimmed.TrimStart('-').Trim();
-                    if (string.IsNullOrWhiteSpace(file)) continue;
-                    revToFiles[currentRev].Add(file);
-                    if (!fileToRevs.ContainsKey(file)) { fileToRevs[file] = new List<string>(); fileOrder.Add(file); }
-                    fileToRevs[file].Add(currentRev);
-                }
-            }
-
-            if (groupBy == "Documento") {
-                foreach (var file in fileOrder) {
+                case FileCoinvoltiNodeKind.IssueHeaderTop:
                     rtbOutput.SelectionFont = new Font(rtbOutput.Font, FontStyle.Bold);
-                    rtbOutput.AppendText("> " + file + Environment.NewLine);
+                    rtbOutput.SelectionColor = Color.DarkBlue;
+                    rtbOutput.AppendText(node.Label + Environment.NewLine + Environment.NewLine);
                     rtbOutput.SelectionFont = rtbOutput.Font;
-                    foreach (var rev in fileToRevs[file])
-                        AppendRevisionEntry(rev, revRegex, isHeader: false);
-                }
-            } else {
-                foreach (var rev in revOrder) {
-                    AppendRevisionEntry(rev, revRegex, isHeader: true);
-                    foreach (var file in revToFiles[rev]) {
-                        rtbOutput.SelectionColor = rtbOutput.ForeColor;
-                        rtbOutput.AppendText("  - " + file + Environment.NewLine);
-                    }
-                }
+                    foreach (var child in node.Children)
+                        RenderFileCoinvoltiNode(child);
+                    break;
+
+                case FileCoinvoltiNodeKind.RevisionMarker:
+                    AppendRevisionMarkerNode(node);
+                    break;
             }
-            rtbOutput.SelectionColor = rtbOutput.ForeColor;
         }
 
-        private void AppendRevisionEntry(string revText, System.Text.RegularExpressions.Regex revRegex, bool isHeader = true, string indent = "") {
-            var m = revRegex.Match(revText);
-            var prefix = isHeader ? ">" : "  -";
+        private void AppendRevisionMarkerNode(FileCoinvoltiNode node) {
+            var prefix = node.IsMarkerHeader ? ">" : "  -";
             string marker = string.Empty;
             var color = rtbOutput.ForeColor;
-            if (m.Success && int.TryParse(m.Groups["rev"].Value, out var rev) && _revisionStates.TryGetValue(rev, out var state)) {
+            if (node.State is RevisionDisplayState state) {
                 var visual = GetStateVisual(state);
                 color = visual.Color;
                 marker = " " + visual.Symbol;
             }
             rtbOutput.SelectionColor = color;
-            rtbOutput.AppendText($"{indent}{prefix}{marker} {NormalizeRevisionText(revText)}" + Environment.NewLine);
+            rtbOutput.AppendText($"{node.Indent}{prefix}{marker} {node.Label}" + Environment.NewLine);
+
+            foreach (var file in node.Files) {
+                rtbOutput.SelectionColor = rtbOutput.ForeColor;
+                rtbOutput.AppendText("  - " + file + Environment.NewLine);
+            }
         }
-        
+
     }
 }
 

@@ -55,17 +55,21 @@ Legenda priorità:
 
 ## 2. Separazione della logica di business dalla UI
 
-- ?? **Spostare la logica di rendering/parsing oggi in `Form1.cs`** in un servizio dedicato
-  (es. `IRevisionRenderingService`), poiché duplica parzialmente `ReportParserService`:
-  - `RenderRevisioniColoured` (righe 397-425), `RenderFileCoinvoltiGrouped` (righe 427-558),
-    `RenderFileCoinvoltiGroupedLegacy` (righe 560-601), `AppendRevisionEntry` (righe 603-615) —
-    contengono regex proprie (`REVISIONE`, estrazione numero revisione tramite `revRegex`,
-    `NormalizeRevisionText`) che si sovrappongono a `RevisionPattern` e `PivotFileCoinvolti` già
-    presenti in `ReportParserService`. Questo viola il principio DRY e rischia disallineamenti se il
-    formato del report cambia (`ReportParserService` andrebbe aggiornato in un solo punto).
-  - `GetStateVisual` (righe 386-392) è invece corretto lasciarlo in `Form1` (mapping stato?colore è
-    legittimamente responsabilità della UI), ma dovrebbe ricevere righe già pre-parsate/strutturate
-    da `ReportParserService` invece di stringhe grezze da ri-analizzare con regex locali.
+- [x] **Spostare la logica di rendering/parsing oggi in `Form1.cs`** in un servizio dedicato
+  (`IRevisionRenderingService`/`RevisionRenderingService`, nuovo file `RevisionRenderingService.cs`):
+  - `RenderFileCoinvoltiGrouped`/`RenderFileCoinvoltiGroupedLegacy`/`AppendRevisionEntry` rimossi da
+    `Form1.cs`; la logica di parsing dei blocchi issue/revisione/file (con fallback legacy) è stata
+    spostata in `RevisionRenderingService.BuildFileCoinvoltiModel`, che produce un modello dati
+    strutturato (`FileCoinvoltiModel`/`FileCoinvoltiNode`) invece di stringhe grezze da ri-analizzare.
+  - `NormalizeRevisionText` ed `ExtractRevisionNumber` centralizzati come metodi pubblici di
+    `ReportParserService` (unica fonte di verità), riusati sia dal nuovo servizio che in precedenza
+    duplicati localmente in `Form1`.
+  - `GetStateVisual` resta in `Form1` (mapping stato?colore, responsabilità della UI) ma ora riceve
+    dati già pre-parsati/strutturati dal modello (`FileCoinvoltiNode.State`) invece di stringhe grezze;
+    `Form1` si limita a iterare il modello (`RenderFileCoinvoltiModel`/`RenderFileCoinvoltiNode`/
+    `AppendRevisionMarkerNode`) scrivendo su `rtbOutput` (font/colore/testo), senza più logica di
+    parsing/regex propria. Build validata.
+  - ? Completed and validated on 2026-08-29
 - ?? **Rimuovere il codice morto identificato in `Form1.cs`**, non referenziato da alcun handler
   attivo (verificato: `btnRun_Click` costruisce `skipSet` inline alle righe 208-212, non usa
   `BuildEffectiveSkipRevisionsAsync`):
