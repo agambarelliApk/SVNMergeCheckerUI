@@ -89,10 +89,11 @@ Legenda priorità:
   267-275) valida solo issue/revisioni; la validazione di percorsi (`txtWorkingCopy`, `txtSourceRepo`)
   e del campo numerico avviene implicitamente altrove o per nulla. Centralizzare in un servizio/metodo
   statico dedicato in `SvnCheckerModels.cs`.
-- ?? **`Form1` istanzia direttamente `new SvnCheckerHelper(_svnService)` dentro `btnRun_Click`**
-  (riga 237) invece che come dipendenza iniettata nel costruttore come gli altri servizi
-  (`_svnService`, `_configService`, `_reportParser`): allineare al pattern già in uso per coerenza e
-  testabilità (constructor injection per tutti i collaboratori).
+- [x] **`Form1` istanzia direttamente `new SvnCheckerHelper(_svnService)` dentro `btnRun_Click`**
+  — risolto: aggiunto il campo `_svnCheckerHelper`, istanziato una sola volta nel costruttore di
+  `Form1` come gli altri servizi (`_svnService`, `_configService`, `_reportParser`); `btnRun_Click`
+  ora riusa l'istanza condivisa invece di crearne una nuova ad ogni click. Build validata.
+  - ? Completed and validated on 2026-08-29
 - ?? **Estrarre in un piccolo helper/ViewModel la costruzione di `SvnCheckerParameters`**
   (righe 208-234), oggi costruita inline nel click handler leggendo direttamente i controlli WinForms.
 

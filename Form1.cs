@@ -5,6 +5,7 @@ namespace SVNMergeCheckerUI {
         private readonly ISvnService _svnService;
         private readonly IConfigService _configService;
         private readonly IReportParserService _reportParser;
+        private readonly SvnCheckerHelper _svnCheckerHelper;
 
         private string _fullReportOutput = string.Empty;
         private CancellationTokenSource? _cts;
@@ -16,6 +17,7 @@ namespace SVNMergeCheckerUI {
             _svnService = new SvnService();
             _configService = new JsonConfigService();
             _reportParser = new ReportParserService();
+            _svnCheckerHelper = new SvnCheckerHelper(_svnService);
 
             cmbResultType.Items.AddRange(new object[]
             {
@@ -286,8 +288,7 @@ namespace SVNMergeCheckerUI {
             );
 
             try {
-                var helper = new SvnCheckerHelper(_svnService);
-                var result = await helper.RunAsync(checkerParams, progress, _cts.Token);
+                var result = await _svnCheckerHelper.RunAsync(checkerParams, progress, _cts.Token);
 
                 _fullReportOutput = result.ReportText;
 
