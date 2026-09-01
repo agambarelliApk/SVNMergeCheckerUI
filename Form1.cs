@@ -439,11 +439,11 @@ namespace SVNMergeCheckerUI {
             RevisionDisplayState.Mergiato => (Color.Green, "[\u2714 ]"),
             RevisionDisplayState.DaMergiareDiretta => (Color.Blue, "[\u25B6]"),
             RevisionDisplayState.DaMergiareIndiretta => (Color.Orange, "[\u2757]"),
-            RevisionDisplayState.DaMergiareIndirettaAlta => (Color.Red, "[\u274C]"),
-            RevisionDisplayState.DipendenzaSuccessivaMergiata => (Color.Red, "[\u274C]"),
-            RevisionDisplayState.DipendenzaSuccessivaDaMergiare => (Color.Orange, "[\u2757]"),
+            RevisionDisplayState.DaMergiareIndirettaAlta => (Color.Red, "[\u2714]"),
+            RevisionDisplayState.DipendenzaSuccessivaMergiata => (Color.Red, "[\u2714]"),
+            RevisionDisplayState.DipendenzaSuccessivaDaMergiare => (Color.Orange, "[\u2757\u25B6]"),
             RevisionDisplayState.DipendenzaPrecedenteMergiata => (Color.Green, "[\u2714]"),
-            RevisionDisplayState.DipendenzaPrecedenteDaMergiare => (Color.DarkOrange, "[\u2757]"),
+            RevisionDisplayState.DipendenzaPrecedenteDaMergiare => (Color.DarkOrange, "[\u2757\u25B6]"),
             _ => (Color.Gray, "[?]")
         };
 
