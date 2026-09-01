@@ -31,13 +31,13 @@ uno strumento visuale per prevenire merge incompleti o inconsistenti prima di es
 ## Caratteristiche principali
 
 - Ricerca delle revisioni SVN per **codice Issue** oppure per **inserimento manuale** dei numeri di revisione.
-- Analisi ciclica delle **dipendenze tra revisioni** basata sui file effettivamente modificati.
+- Analisi ciclica delle **dipendenze tra revisioni** basata sui file effettivamente modificati, estesa sia alle revisioni **precedenti** che a quelle **successive** nella cronologia SVN.
 - Rilevamento automatico delle revisioni **già mergiate** tramite `svn mergeinfo`.
-- Classificazione visiva a colori delle revisioni:
-  - 🟢 **Verde** — già mergiata.
-  - 🔵 **Blu** — da mergiare, direttamente coinvolta nell'issue/revisione richiesta.
-  - 🟠 **Arancione** — da mergiare, dipendenza indiretta.
-  - 🔴 **Rosso** — da mergiare, dipendenza indiretta con numero di revisione superiore alle dirette pendenti.
+- Classificazione visiva dettagliata tramite simboli e colori:
+  - 🟢 **Verde (`[✓]`)** — già mergiata (revisione diretta).
+  - 🔵 **Blu (`[>]` / `[▶]`)** — da mergiare se revisione diretta (`[>]`), oppure già mergiata se dipendenza precedente (`[▶]`).
+  - 🟠 **Arancione (`[!]` / `[❗]`)** — da mergiare (dipendenza indiretta o dipendenza precedente/successiva).
+  - 🔴 **Rosso (`[X]` / `[❌]`)** — dipendenza indiretta alta (`[X]`) oppure dipendenza successiva già mergiata (`[❌]`).
 - Viste multiple del report: elenco revisioni, albero delle dipendenze, file coinvolti (raggruppabili per
   issue/revisione o per file), log di console.
 - Generazione automatica del comando `svn merge` consigliato, limitato alle sole revisioni ancora da mergiare.

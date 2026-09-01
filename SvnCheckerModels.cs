@@ -8,20 +8,40 @@ namespace SVNMergeCheckerUI
         IReadOnlySet<int> SkipRevisions,
         int MaxNewRevs,
         string? OutFile,
-        int SvnTimeoutSeconds = 60
+        int SvnTimeoutSeconds = 60,
+        // Numero di giorni prima della revisione più antica inserita dall'utente da considerare
+        // come finestra minima di ricerca della cronologia dei file (precedente/successiva).
+        // 0 = nessun limite inferiore (usa DateTime.MinValue).
+        int SearchMinDateDays = 60
     );
 
-    // Stati di visualizzazione a 4 valori:
+    // Stati di visualizzazione:
     // - Mergiato: revisione già mergiata
     // - DaMergiareDiretta: revisione direttamente coinvolta (issue/manuale) ancora da mergiare
     // - DaMergiareIndiretta: dipendenza indiretta ancora da mergiare
     // - DaMergiareIndirettaAlta: dipendenza indiretta con numero di revisione superiore
     //   rispetto a tutte le revisioni dirette ancora da mergiare
+    // - DipendenzaSuccessivaMergiata/DaMergiare: dipendenza scoperta tramite cronologia file,
+    //   con numero di revisione SUCCESSIVO a quella che l'ha originata
+    // - DipendenzaPrecedenteMergiata/DaMergiare: dipendenza scoperta tramite cronologia file,
+    //   con numero di revisione PRECEDENTE a quella che l'ha originata
     public enum RevisionDisplayState {
         Mergiato,
         DaMergiareDiretta,
         DaMergiareIndiretta,
-        DaMergiareIndirettaAlta
+        DaMergiareIndirettaAlta,
+        DipendenzaSuccessivaMergiata,
+        DipendenzaSuccessivaDaMergiare,
+        DipendenzaPrecedenteMergiata,
+        DipendenzaPrecedenteDaMergiare
+    }
+
+    // Direzione temporale di una dipendenza scoperta tramite la cronologia di un file,
+    // rispetto alla revisione dell'utente che ha portato alla sua scoperta.
+    public enum DependencyDirection {
+        None,
+        Previous,
+        Next
     }
 
     public class RevisionInfo
@@ -35,6 +55,7 @@ namespace SVNMergeCheckerUI
         public List<string> Files { get; } = new();
         public HashSet<string> MatchedIssues { get; } = new(StringComparer.OrdinalIgnoreCase);
         public RevisionInfo? ParentRev { get; set; }
+        public DependencyDirection Direction { get; set; } = DependencyDirection.None;
     }
 
 

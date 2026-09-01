@@ -434,12 +434,16 @@ namespace SVNMergeCheckerUI {
             rtbOutput.ResumeLayout();
         }
 
-        // Colore e simbolo unico per ciascuno dei 4 stati di visualizzazione delle revisioni.
+        // Colore e simbolo unico per ciascuno degli stati di visualizzazione delle revisioni.
         private static (Color Color, string Symbol) GetStateVisual(RevisionDisplayState state) => state switch {
-            RevisionDisplayState.Mergiato => (Color.Green, "[\u2713]"),
-            RevisionDisplayState.DaMergiareDiretta => (Color.Blue, "[>]"),
-            RevisionDisplayState.DaMergiareIndiretta => (Color.Orange, "[!]"),
-            RevisionDisplayState.DaMergiareIndirettaAlta => (Color.Red, "[X]"),
+            RevisionDisplayState.Mergiato => (Color.Green, "[\u2714 ]"),
+            RevisionDisplayState.DaMergiareDiretta => (Color.Blue, "[\u25B6]"),
+            RevisionDisplayState.DaMergiareIndiretta => (Color.Orange, "[\u2757]"),
+            RevisionDisplayState.DaMergiareIndirettaAlta => (Color.Red, "[\u274C]"),
+            RevisionDisplayState.DipendenzaSuccessivaMergiata => (Color.Red, "[\u274C]"),
+            RevisionDisplayState.DipendenzaSuccessivaDaMergiare => (Color.Orange, "[\u2757]"),
+            RevisionDisplayState.DipendenzaPrecedenteMergiata => (Color.Green, "[\u2714]"),
+            RevisionDisplayState.DipendenzaPrecedenteDaMergiare => (Color.DarkOrange, "[\u2757]"),
             _ => (Color.Gray, "[?]")
         };
 

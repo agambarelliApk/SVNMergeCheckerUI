@@ -98,6 +98,16 @@ Legenda priorità:
   `Form1` come gli altri servizi (`_svnService`, `_configService`, `_reportParser`); `btnRun_Click`
   ora riusa l'istanza condivisa invece di crearne una nuova ad ogni click. Build validata.
   - ? Completed and validated on 2026-08-29
+- [x] **Analisi cronologia file completa (passata e futura) e classificazione direzionale delle dipendenze**:
+  - Rimossa la peg revision (`@rev`) nelle chiamate a `svn log` in `SvnCheckerHelper.AnalyzeDependenciesAsync` in favore del range esplicito `1:HEAD`, consentendo l'ispezione sia delle revisioni precedenti che di quelle successive a quella inserita dall'utente per ciascun file (analizzato solo alla prima occorrenza via `processedFiles`).
+  - Introdotto l'enum `DependencyDirection` (`None`, `Previous`, `Next`) e la proprietà `SearchMinDateDays` in `SvnCheckerParameters` per rendere la finestra temporale minima di ricerca parametrizzabile.
+  - Esteso `RevisionDisplayState` con 4 nuovi stati visivi:
+    - `DipendenzaSuccessivaMergiata`: `[?]` (rosso)
+    - `DipendenzaSuccessivaDaMergiare`: `[?]` (arancio)
+    - `DipendenzaPrecedenteMergiata`: `[?]` (blu)
+    - `DipendenzaPrecedenteDaMergiare`: `[?]` (arancio)
+  - Aggiornato `Form1.GetStateVisual`, `StateCode` e `MergeStateLabel` per supportare i nuovi simboli e colori. Build e suite di test validati (37/37 verdi).
+  - ? Completed and validated on 2026-08-29
 - ?? **Estrarre in un piccolo helper/ViewModel la costruzione di `SvnCheckerParameters`**
   (righe 208-234), oggi costruita inline nel click handler leggendo direttamente i controlli WinForms.
 

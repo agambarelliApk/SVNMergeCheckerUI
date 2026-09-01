@@ -40,8 +40,11 @@ namespace SVNMergeCheckerUI {
                 return new SvnCheckerResult();
             }
 
-            var searchMinDate = details.Values.Select(r => r.Date)
-                                       .DefaultIfEmpty(DateTime.Now.AddYears(-1)).Min();
+            var earliestUserRevDate = details.Values.Select(r => r.Date)
+                                       .DefaultIfEmpty(DateTime.Now).Min();
+            var searchMinDate = p.SearchMinDateDays > 0
+                ? earliestUserRevDate.AddDays(-p.SearchMinDateDays)
+                : DateTime.MinValue;
 
             // 3. Analisi ciclica dipendenze
             var tree = new Dictionary<int, List<string>>();
@@ -67,7 +70,17 @@ namespace SVNMergeCheckerUI {
                 .Max();
 
             foreach (var info in details.Values) {
-                if (mergedSet.Contains(info.Number)) {
+                var isMerged = mergedSet.Contains(info.Number);
+
+                if (info.Direction == DependencyDirection.Next) {
+                    info.DisplayState = isMerged
+                        ? RevisionDisplayState.DipendenzaSuccessivaMergiata
+                        : RevisionDisplayState.DipendenzaSuccessivaDaMergiare;
+                } else if (info.Direction == DependencyDirection.Previous) {
+                    info.DisplayState = isMerged
+                        ? RevisionDisplayState.DipendenzaPrecedenteMergiata
+                        : RevisionDisplayState.DipendenzaPrecedenteDaMergiare;
+                } else if (isMerged) {
                     info.DisplayState = RevisionDisplayState.Mergiato;
                 } else if (info.ParentRev == null) {
                     info.DisplayState = RevisionDisplayState.DaMergiareDiretta;
@@ -222,30 +235,40 @@ namespace SVNMergeCheckerUI {
                         ? file
                         : $"{repoUrl.TrimEnd('/')}/{file.TrimStart('/')}";
 
+                    // Nessuna peg revision (@rev): recupera l'intera cronologia del file (precedente
+                    // e successiva alla revisione corrente), limitata inferiormente da searchMinDate.
                     var fileLogXml = await RunSvnXmlAsync(
-                        new[] { "log", "--xml", $"{fileUrl}@{rev}" }, ct, timeoutMs);
+                        new[] { "log", "--xml", "-r", "1:HEAD", fileUrl }, ct, timeoutMs);
                     if (fileLogXml is null) continue;
 
+                    var truncated = false;
                     foreach (XmlElement entry in fileLogXml.SelectNodes("/log/logentry")!) {
                         if (!int.TryParse(entry.GetAttribute("revision"), out var fRev)) continue;
+                        if (fRev == rev) continue;
                         if (!DateTime.TryParse(entry.SelectSingleNode("date")?.InnerText, out var fDate)) fDate = DateTime.MinValue;
                         if (fDate < searchMinDate) continue;
                         if (toProcess.Contains(fRev)) continue;
 
+                        var direction = fRev > rev ? DependencyDirection.Next : DependencyDirection.Previous;
+
                         var fAuth = entry.SelectSingleNode("author")?.InnerText.Trim() ?? "Unknown";
                         var fMsg = entry.SelectSingleNode("msg")?.InnerText.Trim() ?? string.Empty;
 
-                        progress.Report($"  [DIPENDENZA TROVATA] '{file}' richiede {fRev} (Autore: {fAuth})");
+                        progress.Report($"  [DIPENDENZA TROVATA] '{file}' richiede {fRev} (Autore: {fAuth}, direzione: {direction})");
 
                         if (toProcess.Count >= maxRevs) {
-                            progress.Report($"  [WARN] Limite massimo di revisioni ({maxRevs}) raggiunto.");
+                            if (!truncated) {
+                                progress.Report($"  [WARN] Limite massimo di revisioni ({maxRevs}) raggiunto.");
+                                truncated = true;
+                            }
                             continue;
                         }
 
-                        TryAddRevision(fRev, fDate, fAuth, fMsg, maxRevs, details, toProcess, parent: details[rev]);
+                        TryAddRevision(fRev, fDate, fAuth, fMsg, maxRevs, details, toProcess, parent: details[rev], direction: direction);
                         if (!tree.ContainsKey(fRev)) tree[fRev] = new List<string>();
                         if (!tree.ContainsKey(rev)) tree[rev] = new List<string>();
-                        tree[rev].Add($"revisione derivata da {rev} da file in {fRev}");
+                        var directionLabel = direction == DependencyDirection.Next ? "successiva" : "precedente";
+                        tree[rev].Add($"revisione {directionLabel} derivata da {rev} da file in {fRev}");
                     }
                 }
             }
@@ -400,10 +423,14 @@ namespace SVNMergeCheckerUI {
         // Helpers report
         // ----------------------------------------------------------------
         private static string MergeStateLabel(RevisionDisplayState state) => state switch {
-            RevisionDisplayState.Mergiato => "[\u2713]",
-            RevisionDisplayState.DaMergiareDiretta => "[>]",
-            RevisionDisplayState.DaMergiareIndiretta => "[!]",
-            RevisionDisplayState.DaMergiareIndirettaAlta => "[X]",
+            RevisionDisplayState.Mergiato => "[\u2714]",
+            RevisionDisplayState.DaMergiareDiretta => "[\u25B6]",
+            RevisionDisplayState.DaMergiareIndiretta => "[\u2757]",
+            RevisionDisplayState.DaMergiareIndirettaAlta => "[\u274C]",
+            RevisionDisplayState.DipendenzaSuccessivaMergiata => "[\u274C]",
+            RevisionDisplayState.DipendenzaSuccessivaDaMergiare => "[\u2757]",
+            RevisionDisplayState.DipendenzaPrecedenteMergiata => "[\u25B6]",
+            RevisionDisplayState.DipendenzaPrecedenteDaMergiare => "[\u2757]",
             _ => "[?]"
         };
 
@@ -412,6 +439,10 @@ namespace SVNMergeCheckerUI {
             RevisionDisplayState.DaMergiareDiretta => "D",
             RevisionDisplayState.DaMergiareIndiretta => "I",
             RevisionDisplayState.DaMergiareIndirettaAlta => "X",
+            RevisionDisplayState.DipendenzaSuccessivaMergiata => "SM",
+            RevisionDisplayState.DipendenzaSuccessivaDaMergiare => "SD",
+            RevisionDisplayState.DipendenzaPrecedenteMergiata => "PM",
+            RevisionDisplayState.DipendenzaPrecedenteDaMergiare => "PD",
             _ => "?"
         };
 
@@ -439,9 +470,10 @@ namespace SVNMergeCheckerUI {
             int maxRevs,
             Dictionary<int, RevisionInfo> details,
             List<int> toProcess,
-            RevisionInfo? parent = null) {
+            RevisionInfo? parent = null,
+            DependencyDirection direction = DependencyDirection.None) {
             if (toProcess.Count >= maxRevs || details.ContainsKey(rev)) return;
-            details[rev] = new RevisionInfo { Number = rev, Date = date, Author = auth, Message = msg, ParentRev = parent };
+            details[rev] = new RevisionInfo { Number = rev, Date = date, Author = auth, Message = msg, ParentRev = parent, Direction = direction };
             toProcess.Add(rev);
         }
 
