@@ -22,23 +22,12 @@ namespace SVNMergeCheckerUI {
             _revisionRenderingService = new RevisionRenderingService(_reportParser);
             _svnCheckerHelper = new SvnCheckerHelper(_svnService);
 
-            cmbResultType.Items.AddRange(new object[]
-            {
-                "Elenco Revisioni", "Albero Dipendenze", "File Coinvolti", "Log Console", "Script output",
-            });
-            cmbResultType.SelectedIndex = 0;
-
-            // group by options for File Coinvolti
-            cmbGroupBy.Items.AddRange(new object[] { "Issue/Revisione", "File" });
-            cmbGroupBy.SelectedIndex = 0;
-            lblGroupBy.Visible = false;
-            cmbGroupBy.Visible = false;
-
             // Mode selector for ResultType (Standard/Debug)
             cmbMode.Items.AddRange(new object[] { "Standard", "Debug" });
             cmbMode.SelectedIndexChanged += cmbMode_SelectedIndexChanged;
             cmbMode.SelectedIndex = 0; // default = Standard
             ApplyModeToResultType();
+            UpdateGroupByOptions();
 
             txtOutFile.Text = @"C:\APSNet\Tempdir\report_svn_checker.txt";
 
@@ -188,17 +177,65 @@ namespace SVNMergeCheckerUI {
         // Result Type Changed
         // ----------------------------------------------------------------
         private void cmbResultType_SelectedIndexChanged(object sender, EventArgs e) {
+            UpdateGroupByOptions();
             if (string.IsNullOrEmpty(_fullReportOutput)) return;
             var resultType = cmbResultType.SelectedItem?.ToString() ?? "Elenco Revisioni";
-            var isFileCoinvolti = resultType == "File Coinvolti";
-            lblGroupBy.Visible = isFileCoinvolti;
-            cmbGroupBy.Visible = isFileCoinvolti;
             RenderOutput(resultType);
         }
 
         private void cmbGroupBy_SelectedIndexChanged(object sender, EventArgs e) {
             if (string.IsNullOrEmpty(_fullReportOutput)) return;
             RenderOutput(cmbResultType.SelectedItem?.ToString() ?? "Elenco Revisioni");
+        }
+
+        private void UpdateGroupByOptions() {
+            var resultType = cmbResultType.SelectedItem?.ToString() ?? "Elenco Revisioni";
+            var currentGroupBy = cmbGroupBy.SelectedItem?.ToString();
+
+            if (resultType == "Elenco Revisioni") {
+                lblGroupBy.Visible = true;
+                cmbGroupBy.Visible = true;
+                var items = new[] { "Issue", "Merge Suggerito" };
+                if (!AreComboItemsEqual(cmbGroupBy.Items, items)) {
+                    cmbGroupBy.BeginUpdate();
+                    try {
+                        cmbGroupBy.Items.Clear();
+                        cmbGroupBy.Items.AddRange(items);
+                        cmbGroupBy.SelectedIndex = (currentGroupBy != null && items.Contains(currentGroupBy))
+                            ? Array.IndexOf(items, currentGroupBy)
+                            : 0;
+                    } finally {
+                        cmbGroupBy.EndUpdate();
+                    }
+                }
+            } else if (resultType == "File Coinvolti") {
+                lblGroupBy.Visible = true;
+                cmbGroupBy.Visible = true;
+                var items = new[] { "Issue/Revisione", "File" };
+                if (!AreComboItemsEqual(cmbGroupBy.Items, items)) {
+                    cmbGroupBy.BeginUpdate();
+                    try {
+                        cmbGroupBy.Items.Clear();
+                        cmbGroupBy.Items.AddRange(items);
+                        cmbGroupBy.SelectedIndex = (currentGroupBy != null && items.Contains(currentGroupBy))
+                            ? Array.IndexOf(items, currentGroupBy)
+                            : 0;
+                    } finally {
+                        cmbGroupBy.EndUpdate();
+                    }
+                }
+            } else {
+                lblGroupBy.Visible = false;
+                cmbGroupBy.Visible = false;
+            }
+        }
+
+        private static bool AreComboItemsEqual(ComboBox.ObjectCollection currentItems, string[] expectedItems) {
+            if (currentItems.Count != expectedItems.Length) return false;
+            for (int i = 0; i < expectedItems.Length; i++) {
+                if (currentItems[i]?.ToString() != expectedItems[i]) return false;
+            }
+            return true;
         }
 
         private void cmbMode_SelectedIndexChanged(object sender, EventArgs e) {
@@ -210,12 +247,12 @@ namespace SVNMergeCheckerUI {
 
             var items = new List<string>
             {
-                "Elenco Revisioni",
-                "Albero Dipendenze",
+                "Elenco Revisioni",                
                 "File Coinvolti"
             };
 
             if (cmbMode.SelectedItem?.ToString() == "Debug") {
+                items.Add("Albero Dipendenze");
                 items.Add("Log Console");
                 items.Add("Script output");
             }
@@ -230,7 +267,7 @@ namespace SVNMergeCheckerUI {
                 else
                     cmbResultType.SelectedIndex = 0;
             } finally { cmbResultType.EndUpdate(); }
-        }
+        }     
 
         // ----------------------------------------------------------------
         // Run Analysis
@@ -422,11 +459,12 @@ namespace SVNMergeCheckerUI {
 
             if (resultType == "Elenco Revisioni") {
                 var section = _reportParser.Parse(_fullReportOutput, resultType);
-                var lines = _reportParser.ParseRevisioniLines(section, _revisionStates, _perIssueRevisionStates);
+                var groupBy = cmbGroupBy.SelectedItem?.ToString() ?? "Issue";
+                var lines = _reportParser.ParseRevisioniLines(section, _revisionStates, _perIssueRevisionStates, groupBy);
                 RenderRevisioniColoured(lines);
             } else if (resultType == "File Coinvolti") {
                 var raw = _reportParser.Parse(_fullReportOutput, "File Coinvolti - Raw");
-                var groupBy = cmbGroupBy.SelectedItem?.ToString() ?? "Revisione";
+                var groupBy = cmbGroupBy.SelectedItem?.ToString() ?? "Issue/Revisione";
                 var model = _revisionRenderingService.BuildFileCoinvoltiModel(raw, groupBy, _revisionStates, _perIssueRevisionStates);
                 RenderFileCoinvoltiModel(model);
             } else {

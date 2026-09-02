@@ -166,6 +166,72 @@ public class ReportParserServiceTests
         Assert.Equal(RevisionDisplayState.DipendenzaPrecedenteDaMergiare, revLines[1].state);
     }
 
+    [Fact]
+    public void ParseRevisioniLines_GroupByMerge_ReturnsHeaderExcludesMergedAndDeduplicatesAscending()
+    {
+        var section =
+            "=== [ISSUE-A] ===\n" +
+            "  => 12348 del 01/01/2024 [mario] : commit A\n" +
+            "  => 12345 del 01/01/2024 [mario] : commit B\n" +
+            "=== [ISSUE-B] ===\n" +
+            "  => 12345 del 01/01/2024 [mario] : commit B (duplicate)\n" +
+            "  => 12346 del 01/01/2024 [luigi] : commit C\n";
+
+        var states = new Dictionary<int, RevisionDisplayState>
+        {
+            [12345] = RevisionDisplayState.DaMergiareDiretta,
+            [12346] = RevisionDisplayState.Mergiato,
+            [12348] = RevisionDisplayState.DaMergiareIndiretta
+        };
+
+        var result = _sut.ParseRevisioniLines(section, states, groupBy: "Merge Suggerito");
+
+        // Header + 2 non-merged revisions (12346 Mergiato is removed)
+        Assert.Equal(3, result.Count);
+        Assert.Equal(("REVISIONI ORDINATE PER MERGE", (RevisionDisplayState?)null), result[0]);
+        Assert.Equal(("  => 12345 del 01/01/2024 [mario] : commit B", (RevisionDisplayState?)RevisionDisplayState.DaMergiareDiretta), result[1]);
+        Assert.Equal(("  => 12348 del 01/01/2024 [mario] : commit A", (RevisionDisplayState?)RevisionDisplayState.DaMergiareIndiretta), result[2]);
+    }
+
+    [Fact]
+    public void ParseRevisioniLines_GroupByMerge_PrioritizesStatesCorrectlyOnDuplicates()
+    {
+        var section =
+            "=== [ISSUE-A] ===\n" +
+            "  => 12345 del 01/01/2024 [mario] : commit da indiretta\n" +
+            "=== [ISSUE-B] ===\n" +
+            "  => 12345 del 01/01/2024 [mario] : commit da diretta\n";
+
+        var perIssueStates = new Dictionary<string, IReadOnlyDictionary<int, RevisionDisplayState>>
+        {
+            ["ISSUE-A"] = new Dictionary<int, RevisionDisplayState> { [12345] = RevisionDisplayState.DipendenzaPrecedenteDaMergiare },
+            ["ISSUE-B"] = new Dictionary<int, RevisionDisplayState> { [12345] = RevisionDisplayState.DaMergiareDiretta }
+        };
+
+        var result = _sut.ParseRevisioniLines(section, new Dictionary<int, RevisionDisplayState>(), perIssueStates, groupBy: "Merge Suggerito");
+
+        Assert.Equal(2, result.Count);
+        Assert.Equal(("REVISIONI ORDINATE PER MERGE", (RevisionDisplayState?)null), result[0]);
+        Assert.Equal(("  => 12345 del 01/01/2024 [mario] : commit da diretta", (RevisionDisplayState?)RevisionDisplayState.DaMergiareDiretta), result[1]);
+    }
+
+    [Fact]
+    public void ParseRevisioniLines_GroupByMerge_RevisionNotInDictionary_IncludedWithNullState()
+    {
+        var section = "  => 12345 del 01/01/2024 [mario] : commit 1\n  => 12340 del 01/01/2024 [mario] : commit 0";
+        var states = new Dictionary<int, RevisionDisplayState>
+        {
+            [12345] = RevisionDisplayState.Mergiato
+        };
+
+        var result = _sut.ParseRevisioniLines(section, states, groupBy: "Merge Suggerito");
+
+        // Header + 12340 (12345 is Mergiato, so excluded)
+        Assert.Equal(2, result.Count);
+        Assert.Equal(("SEQUENZA DI MERGE CONSIGLIATA", (RevisionDisplayState?)null), result[0]);
+        Assert.Equal(("  => 12340 del 01/01/2024 [mario] : commit 0", (RevisionDisplayState?)null), result[1]);
+    }
+
     // ---------------------------------------------------------------
     // PivotFileCoinvolti
     // ---------------------------------------------------------------

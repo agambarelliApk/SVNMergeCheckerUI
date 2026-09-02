@@ -33,6 +33,9 @@ Copertura attuale:
 - `ParseRevisioniLines_RevisionNotInDictionary_HasNullState`
 - `ParseRevisioniLines_RevisionInDictionary_HasMatchingState`
 - `ParseRevisioniLines_UsesPerIssueState_WhenAvailable`
+- `ParseRevisioniLines_GroupByMerge_ReturnsHeaderExcludesMergedAndDeduplicatesAscending`
+- `ParseRevisioniLines_GroupByMerge_PrioritizesStatesCorrectlyOnDuplicates`
+- `ParseRevisioniLines_GroupByMerge_RevisionNotInDictionary_IncludedWithNullState`
 - `PivotFileCoinvolti_ReturnsInputUnchanged_WhenNoFilesFound`
 - `PivotFileCoinvolti_GroupsFilesByRevisionAndIssue`
 - `PivotFileCoinvolti_SkipsFilesMarkedAsNoneFound`
@@ -107,7 +110,7 @@ Copertura attuale:
 ## Conclusione
 
 La suite di test esistente è compatibile con il progetto principale e il build della solution risulta
-corretto. Al momento sono presenti 38 test automatici, tutti verdi (`dotnet test`).
+corretto. Al momento sono presenti 41 test automatici, tutti verdi (`dotnet test`).
 
 Attività future possibili: introdurre un'astrazione `IProcessRunner` iniettabile per isolare
 completamente `Process.Start` in `SvnService`/`SvnCheckerHelper` e testare così anche il flusso

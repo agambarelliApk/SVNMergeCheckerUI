@@ -38,6 +38,10 @@ Copertura attuale:
 - `ParseRevisioniLines_EmptyLine_HasNullState`
 - `ParseRevisioniLines_RevisionNotInDictionary_HasNullState`
 - `ParseRevisioniLines_RevisionInDictionary_HasMatchingState`
+- `ParseRevisioniLines_UsesPerIssueState_WhenAvailable`
+- `ParseRevisioniLines_GroupByMerge_ReturnsHeaderExcludesMergedAndDeduplicatesAscending`
+- `ParseRevisioniLines_GroupByMerge_PrioritizesStatesCorrectlyOnDuplicates`
+- `ParseRevisioniLines_GroupByMerge_RevisionNotInDictionary_IncludedWithNullState`
 - `PivotFileCoinvolti_ReturnsInputUnchanged_WhenNoFilesFound`
 - `PivotFileCoinvolti_GroupsFilesByRevisionAndIssue`
 - `PivotFileCoinvolti_SkipsFilesMarkedAsNoneFound`

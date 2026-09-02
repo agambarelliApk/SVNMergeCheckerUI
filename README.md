@@ -38,7 +38,7 @@ uno strumento visuale per prevenire merge incompleti o inconsistenti prima di es
   - 🔵 **Blu (`[>]` / `[▶]`)** — da mergiare se revisione diretta (`[>]`), oppure già mergiata se dipendenza precedente (`[▶]`).
   - 🟠 **Arancione (`[!]` / `[❗]`)** — da mergiare (dipendenza indiretta o dipendenza precedente/successiva).
   - 🔴 **Rosso (`[X]` / `[❌]`)** — dipendenza indiretta alta (`[X]`) oppure dipendenza successiva già mergiata (`[❌]`).
-- Viste multiple del report: elenco revisioni, albero delle dipendenze, file coinvolti (raggruppabili per
+- Viste multiple del report: elenco revisioni (raggruppabile per Issue o per Merge con ordine crescente ed esclusione dei già mergiati), albero delle dipendenze, file coinvolti (raggruppabili per
   issue/revisione o per file), log di console.
 - Generazione automatica del comando `svn merge` consigliato, limitato alle sole revisioni ancora da mergiare.
 - Salvataggio e caricamento di **profili di configurazione** (working copy, repository sorgente, parametri) in un

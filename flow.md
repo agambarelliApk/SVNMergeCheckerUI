@@ -53,9 +53,8 @@ funzioni collegate, con particolare attenzione alla gestione multi-issue e alle 
 
 ### Sezione 1 - elenco revisioni
 
-- Raggruppa le revisioni per issue.
-- Inserisce il separatore `--- Revisioni senza issue diretta ---` per le revisioni di dipendenza assegnate alla specifica issue.
-- Usa `StateForIssue(...)` per evitare il collasso su uno stato unico.
+- Modalità **GroupBy = "Issue"**: raggruppa le revisioni per issue, inserisce il separatore `--- Revisioni senza issue diretta ---` per le dipendenze della issue e usa `StateForIssue(...)` per evitare il collasso su uno stato unico.
+- Modalità **GroupBy = "Merge"**: genera l'elenco deduplicato e ordinato in modo crescente di tutte le revisioni da mergiare con intestazione `REVISIONI ORDINATE PER MERGE`, esclude quelle già mergiate e risolve le collisioni secondo la gerarchia di priorità degli stati.
 
 ### Sezione 2 - albero dipendenze
 

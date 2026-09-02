@@ -108,6 +108,11 @@ Legenda priorità:
     - `DipendenzaPrecedenteDaMergiare`: `[?]` (arancio)
   - Aggiornato `Form1.GetStateVisual`, `StateCode` e `MergeStateLabel` per supportare i nuovi simboli e colori. Build e suite di test validati (37/37 verdi).
   - ? Completed and validated on 2026-08-29
+- [x] **Supporto GroupBy "Merge" in `Elenco Revisioni` e fix errore di compilazione CS0136**:
+  - In `ReportParserService.ParseRevisioniLines`, implementata la modalità `groupBy = "Merge"` con ordinamento crescente per numero di revisione, intestazione `"REVISIONI ORDINATE PER MERGE"` (ForeColor standard), esclusione delle revisioni con stato `Mergiato` e accorpamento duplicati con risoluzione priorità stati (`DaMergiareDiretta` > `DipendenzaSuccessivaMergiata` > `DipendenzaPrecedenteMergiata` > `DaMergiareIndirettaAlta` > `DaMergiareIndiretta` > `DipendenzaPrecedenteDaMergiare` > `DipendenzaSuccessivaDaMergiare`).
+  - Risolto l'errore CS0136 centralizzando la dichiarazione della variabile locale `currentIssue` in testa a `ParseRevisioniLines`.
+  - Aggiunti unit test dedicati (`ParseRevisioniLines_GroupByMerge_*`).
+  - ? Completed and validated on 2026-08-29 (41/41 test verdi)
 - ?? **Estrarre in un piccolo helper/ViewModel la costruzione di `SvnCheckerParameters`**
   (righe 208-234), oggi costruita inline nel click handler leggendo direttamente i controlli WinForms.
 

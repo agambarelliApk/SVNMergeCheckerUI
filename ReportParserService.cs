@@ -10,7 +10,8 @@ namespace SVNMergeCheckerUI
         IReadOnlyList<(string line, RevisionDisplayState? state)> ParseRevisioniLines(
             string section,
             IReadOnlyDictionary<int, RevisionDisplayState> revisionStates,
-            IReadOnlyDictionary<string, IReadOnlyDictionary<int, RevisionDisplayState>>? perIssueRevisionStates = null);
+            IReadOnlyDictionary<string, IReadOnlyDictionary<int, RevisionDisplayState>>? perIssueRevisionStates = null,
+            string groupBy = "Issue");
         int? ExtractRevisionNumber(string text);
         string NormalizeRevisionText(string text);
     }
@@ -77,17 +78,91 @@ namespace SVNMergeCheckerUI
                 "2. STRUTTURA AD ALBERO");
         }
 
+        private static int GetMergeStatePriority(RevisionDisplayState? state) => state switch
+        {
+            RevisionDisplayState.DaMergiareDiretta => 1,
+            RevisionDisplayState.DipendenzaSuccessivaMergiata => 2,
+            RevisionDisplayState.DipendenzaPrecedenteMergiata => 3,
+            RevisionDisplayState.DaMergiareIndirettaAlta => 4,
+            RevisionDisplayState.DaMergiareIndiretta => 5,
+            RevisionDisplayState.DipendenzaPrecedenteDaMergiare => 6,
+            RevisionDisplayState.DipendenzaSuccessivaDaMergiare => 7,
+            RevisionDisplayState.Mergiato => 8,
+            _ => 99
+        };
+
         /// <summary>
         /// Parses the "Elenco Revisioni" section line by line and annotates each line
         /// with its revision display state (checking per-issue states first if available).
+        /// When groupBy is "Merge Suggerito", returns a deduplicated, ascending list of revisions
+        /// excluding merged revisions and prioritized by merge display state.
         /// </summary>
         public IReadOnlyList<(string line, RevisionDisplayState? state)> ParseRevisioniLines(
             string section,
             IReadOnlyDictionary<int, RevisionDisplayState> revisionStates,
-            IReadOnlyDictionary<string, IReadOnlyDictionary<int, RevisionDisplayState>>? perIssueRevisionStates = null)
+            IReadOnlyDictionary<string, IReadOnlyDictionary<int, RevisionDisplayState>>? perIssueRevisionStates = null,
+            string groupBy = "Issue")
         {
-            var result = new List<(string, RevisionDisplayState?)>();
             string? currentIssue = null;
+
+            if (string.Equals(groupBy, "Merge Suggerito", StringComparison.OrdinalIgnoreCase))
+            {
+                var revCandidates = new Dictionary<int, (string line, RevisionDisplayState? state)>();
+
+                foreach (var rawLine in section.Split('\n'))
+                {
+                    var line = rawLine.TrimEnd('\r');
+                    var trimmed = line.Trim();
+                    var normalized = trimmed.Trim('=', ' ');
+                    if (normalized.StartsWith("[") && normalized.EndsWith("]"))
+                    {
+                        currentIssue = normalized.Trim('[', ']');
+                    }
+
+                    var match = RevisionPattern.Match(line);
+                    if (match.Success && int.TryParse(match.Groups["rev"].Value, out var rev))
+                    {
+                        RevisionDisplayState? state = null;
+                        if (currentIssue != null && perIssueRevisionStates != null &&
+                            perIssueRevisionStates.TryGetValue(currentIssue, out var issueStates) &&
+                            issueStates.TryGetValue(rev, out var perIssueState))
+                        {
+                            state = perIssueState;
+                        }
+                        else if (revisionStates.TryGetValue(rev, out var globalState))
+                        {
+                            state = globalState;
+                        }
+
+                        if (!revCandidates.TryGetValue(rev, out var existing))
+                        {
+                            revCandidates[rev] = (line, state);
+                        }
+                        else if (GetMergeStatePriority(state) < GetMergeStatePriority(existing.state))
+                        {
+                            revCandidates[rev] = (line, state);
+                        }
+                    }
+                }
+
+                var mergeResult = new List<(string, RevisionDisplayState?)>
+                {
+                    ("SEQUENZA DI MERGE CONSIGLIATA", null)
+                };
+
+                foreach (var kvp in revCandidates.OrderBy(kv => kv.Key))
+                {
+                    if (kvp.Value.state == RevisionDisplayState.Mergiato || kvp.Value.state == RevisionDisplayState.DipendenzaPrecedenteMergiata)
+                        continue;
+
+                    mergeResult.Add((kvp.Value.line.Replace("    ", "  "), kvp.Value.state));
+                }
+
+                return mergeResult;
+            }
+
+            var result = new List<(string, RevisionDisplayState?)>();
+            currentIssue = null;
 
             foreach (var rawLine in section.Split('\n'))
             {
@@ -114,7 +189,7 @@ namespace SVNMergeCheckerUI
                         state = globalState;
                     }
                 }
-                result.Add((line, state));
+                result.Add((line.Replace("    ", "  "), state));
             }
             return result;
         }
