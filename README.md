@@ -44,6 +44,9 @@ uno strumento visuale per prevenire merge incompleti o inconsistenti prima di es
 - Salvataggio e caricamento di **profili di configurazione** (working copy, repository sorgente, parametri) in un
   file JSON locale.
 - Esportazione del report completo su file di testo.
+- Raggruppamento delle revisioni di dipendenza (senza issue diretta) direttamente sotto l'header dell'issue di provenienza tramite il separatore `--- Revisioni senza issue diretta ---`.
+- Posizionamento uniforme del simbolo di stato visivo in testa alla riga di ciascuna revisione (subito dopo il marcatore `>` o `=>`).
+- Gestione corretta **per-issue** delle revisioni condivise: la stessa revisione può restare diretta per un'issue e comparire come dipendenza (con stato dedicato) in un'altra nella stessa esecuzione multi-issue.
 
 ## Prerequisiti
 

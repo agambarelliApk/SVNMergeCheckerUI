@@ -197,3 +197,6 @@ Legenda priorità:
   dell'asincronia (unico punto del codebase con gestione corretta di cancellazione + kill del
   processo), ma risulta non collegato al flusso UI attivo: va deciso se è codice da rimuovere o da
   ricollegare, prima di investire ulteriore effort di refactoring su `SvnService`/`SvnCheckerHelper`.
+- Fix recente validato: nelle esecuzioni multi-issue le revisioni condivise non vengono più collassate
+  su uno stato unico e le revisioni senza issue diretta non spariscono più dall'output; il flusso ora
+  conserva sia la vista globale sia quella per-issue. Build e test validati (38/38 verdi).

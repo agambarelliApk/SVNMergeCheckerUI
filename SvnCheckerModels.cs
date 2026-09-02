@@ -56,7 +56,27 @@ namespace SVNMergeCheckerUI
         public HashSet<string> MatchedIssues { get; } = new(StringComparer.OrdinalIgnoreCase);
         public RevisionInfo? ParentRev { get; set; }
         public DependencyDirection Direction { get; set; } = DependencyDirection.None;
+        // Issue con cui questa revisione condivide un file, scoperte durante l'analisi delle
+        // dipendenze di un'altra issue, anche quando questa revisione risulta "diretta" per una
+        // issue diversa (nel qual caso ParentRev/Direction vengono azzerati da MergeIssueResults
+        // ma il legame incrociato va comunque preservato per la visualizzazione nel report).
+        public HashSet<string> CrossIssueDependencies { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+        // Ruolo (dipendenza/diretta + genitore) che questa revisione ha nel contesto di ciascuna
+        // issue che la referenzia. Necessario perché una stessa revisione può essere "diretta"
+        // per un'issue e "dipendenza" (precedente/successiva) per un'altra: Direction/ParentRev
+        // sono scalari e non bastano a rappresentare entrambi i ruoli contemporaneamente.
+        public Dictionary<string, PerIssueRole> PerIssueRoles { get; } =
+            new(StringComparer.OrdinalIgnoreCase);
+
+        // Stato di visualizzazione calcolato nel contesto di ciascuna issue (vedi PerIssueRoles).
+        public Dictionary<string, RevisionDisplayState> PerIssueDisplayStates { get; } =
+            new(StringComparer.OrdinalIgnoreCase);
     }
+
+    // Ruolo di una revisione nel contesto di una specifica issue: genitore (se dipendenza) e
+    // direzione temporale rispetto ad esso.
+    public sealed record PerIssueRole(int? ParentRevNumber, DependencyDirection Direction);
 
 
     public class SvnCheckerResult
@@ -65,6 +85,7 @@ namespace SVNMergeCheckerUI
         public IReadOnlyDictionary<int, List<string>> DependencyTree { get; init; } = new Dictionary<int, List<string>>();
         public IReadOnlySet<int> MergedRevisions { get; init; } = new HashSet<int>();
         public IReadOnlyDictionary<int, RevisionDisplayState> RevisionStates { get; init; } = new Dictionary<int, RevisionDisplayState>();
+        public IReadOnlyDictionary<string, IReadOnlyDictionary<int, RevisionDisplayState>> PerIssueRevisionStates { get; init; } = new Dictionary<string, IReadOnlyDictionary<int, RevisionDisplayState>>();
         public string ReportText { get; init; } = string.Empty;
         public string MergedRevisionsMarker =>
             $"##MERGED_REVISIONS:{string.Join(",", MergedRevisions)}";

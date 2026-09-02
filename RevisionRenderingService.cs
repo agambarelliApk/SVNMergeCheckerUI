@@ -23,7 +23,10 @@ namespace SVNMergeCheckerUI
     public interface IRevisionRenderingService
     {
         FileCoinvoltiModel BuildFileCoinvoltiModel(
-            string rawSection, string groupBy, IReadOnlyDictionary<int, RevisionDisplayState> revisionStates);
+            string rawSection,
+            string groupBy,
+            IReadOnlyDictionary<int, RevisionDisplayState> revisionStates,
+            IReadOnlyDictionary<string, IReadOnlyDictionary<int, RevisionDisplayState>>? perIssueRevisionStates = null);
     }
 
     public class RevisionRenderingService : IRevisionRenderingService
@@ -36,7 +39,10 @@ namespace SVNMergeCheckerUI
         }
 
         public FileCoinvoltiModel BuildFileCoinvoltiModel(
-            string rawSection, string groupBy, IReadOnlyDictionary<int, RevisionDisplayState> revisionStates)
+            string rawSection,
+            string groupBy,
+            IReadOnlyDictionary<int, RevisionDisplayState> revisionStates,
+            IReadOnlyDictionary<string, IReadOnlyDictionary<int, RevisionDisplayState>>? perIssueRevisionStates = null)
         {
             if (string.IsNullOrWhiteSpace(rawSection))
                 return new FileCoinvoltiModel(Array.Empty<FileCoinvoltiNode>());
@@ -53,7 +59,12 @@ namespace SVNMergeCheckerUI
                 var line = rawLine.TrimEnd('\r');
                 var trimmed = line.TrimStart();
 
-                if (trimmed.StartsWith("[") && trimmed.EndsWith("]"))
+                // Separatore di sotto-gruppo "--- Revisioni senza issue diretta ---": ignorato
+                if (trimmed.StartsWith("---") && trimmed.EndsWith("---"))
+                    continue;
+
+                var normalized = trimmed.Trim('=', ' ');
+                if (normalized.StartsWith("[") && normalized.EndsWith("]"))
                 {
                     if (currentRev != null && currentRevFiles != null && currentIssueRevs != null)
                         currentIssueRevs.Add((currentRev, currentRevFiles));
@@ -61,7 +72,7 @@ namespace SVNMergeCheckerUI
                     if (currentIssue != null && currentIssueRevs != null)
                         issueBlocks.Add((currentIssue, currentIssueRevs));
 
-                    currentIssue = trimmed;
+                    currentIssue = normalized;
                     currentIssueRevs = new List<(string, List<string>)>();
                     currentRev = null;
                     currentRevFiles = null;
@@ -134,13 +145,17 @@ namespace SVNMergeCheckerUI
                     var issueNodes = new List<FileCoinvoltiNode>();
                     foreach (var issueLabel in issueOrder)
                     {
+                        var issueKey = issueLabel.Trim('[', ']');
+                        IReadOnlyDictionary<int, RevisionDisplayState>? issueStates = null;
+                        perIssueRevisionStates?.TryGetValue(issueKey, out issueStates);
+
                         var revNodes = issueToRevs[issueLabel]
-                            .Select(rev => MakeRevisionMarkerNode(rev, revisionStates, isMarkerHeader: true, indent: "    "))
+                            .Select(rev => MakeRevisionMarkerNode(rev, revisionStates, issueStates, isMarkerHeader: true, indent: "    "))
                             .ToList();
 
                         issueNodes.Add(new FileCoinvoltiNode(
                             FileCoinvoltiNodeKind.IssueHeaderNested,
-                            $" {issueLabel}",
+                            $"=== {issueLabel} ===",
                             null, false, "", Array.Empty<string>(), revNodes));
                     }
 
@@ -153,13 +168,18 @@ namespace SVNMergeCheckerUI
             {
                 foreach (var (issueLabel, revisions) in issueBlocks)
                 {
+                    var issueKey = issueLabel.Trim('[', ']');
+                    IReadOnlyDictionary<int, RevisionDisplayState>? issueStates = null;
+                    perIssueRevisionStates?.TryGetValue(issueKey, out issueStates);
+
                     var revNodes = revisions
-                        .Select(r => MakeRevisionMarkerNode(r.revLabel, revisionStates, isMarkerHeader: true, indent: "", files: r.files))
+                        .Select(r => MakeRevisionMarkerNode(r.revLabel, revisionStates, issueStates, isMarkerHeader: true, indent: "", files: r.files))
                         .ToList();
 
                     roots.Add(new FileCoinvoltiNode(
                         FileCoinvoltiNodeKind.IssueHeaderTop,
-                        issueLabel, null, false, "", Array.Empty<string>(), revNodes, TrailingBlankLine: true));
+                        $"=== {issueLabel} ===",
+                        null, false, "", Array.Empty<string>(), revNodes, TrailingBlankLine: true));
                 }
             }
 
@@ -179,6 +199,11 @@ namespace SVNMergeCheckerUI
             {
                 var line = rawLine.TrimEnd('\r');
                 var trimmed = line.TrimStart();
+
+                // Separatore di sotto-gruppo "--- Revisioni senza issue diretta ---": ignorato
+                if (trimmed.StartsWith("---") && trimmed.EndsWith("---"))
+                    continue;
+
                 if (trimmed.StartsWith(">"))
                 {
                     var revText = System.Text.RegularExpressions.Regex.Replace(
@@ -224,20 +249,34 @@ namespace SVNMergeCheckerUI
 
         private FileCoinvoltiNode MakeRevisionMarkerNode(
             string revLabel,
-            IReadOnlyDictionary<int, RevisionDisplayState> revisionStates,
+            IReadOnlyDictionary<int, RevisionDisplayState> globalStates,
+            IReadOnlyDictionary<int, RevisionDisplayState>? perIssueStates,
             bool isMarkerHeader,
             string indent,
             List<string>? files = null)
         {
             RevisionDisplayState? state = null;
             var revNumber = _reportParser.ExtractRevisionNumber(revLabel);
-            if (revNumber is int rev && revisionStates.TryGetValue(rev, out var found))
-                state = found;
+            if (revNumber is int rev)
+            {
+                if (perIssueStates != null && perIssueStates.TryGetValue(rev, out var foundPerIssue))
+                    state = foundPerIssue;
+                else if (globalStates.TryGetValue(rev, out var foundGlobal))
+                    state = foundGlobal;
+            }
 
             return new FileCoinvoltiNode(
                 FileCoinvoltiNodeKind.RevisionMarker,
                 revLabel, state, isMarkerHeader, indent,
                 files ?? new List<string>(), Array.Empty<FileCoinvoltiNode>());
         }
+
+        private FileCoinvoltiNode MakeRevisionMarkerNode(
+            string revLabel,
+            IReadOnlyDictionary<int, RevisionDisplayState> revisionStates,
+            bool isMarkerHeader,
+            string indent,
+            List<string>? files = null) =>
+            MakeRevisionMarkerNode(revLabel, revisionStates, perIssueStates: null, isMarkerHeader, indent, files);
     }
 }

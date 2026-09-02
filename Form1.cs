@@ -12,6 +12,7 @@ namespace SVNMergeCheckerUI {
         private CancellationTokenSource? _cts;
         private string? _btnRunOriginalText;
         private IReadOnlyDictionary<int, RevisionDisplayState> _revisionStates = new Dictionary<int, RevisionDisplayState>();
+        private IReadOnlyDictionary<string, IReadOnlyDictionary<int, RevisionDisplayState>> _perIssueRevisionStates = new Dictionary<string, IReadOnlyDictionary<int, RevisionDisplayState>>();
 
         public Form1() {
             InitializeComponent();
@@ -296,6 +297,7 @@ namespace SVNMergeCheckerUI {
 
                 if (result.RevisionStates.Count > 0) {
                     _revisionStates = result.RevisionStates;
+                    _perIssueRevisionStates = result.PerIssueRevisionStates;
                     var mergedCount = result.RevisionStates.Values.Count(s => s == RevisionDisplayState.Mergiato);
                     ((IProgress<string>)progress).Report(
                         $"[INFO] {mergedCount} revisioni già mergiate rilevate.");
@@ -420,12 +422,12 @@ namespace SVNMergeCheckerUI {
 
             if (resultType == "Elenco Revisioni") {
                 var section = _reportParser.Parse(_fullReportOutput, resultType);
-                var lines = _reportParser.ParseRevisioniLines(section, _revisionStates);
+                var lines = _reportParser.ParseRevisioniLines(section, _revisionStates, _perIssueRevisionStates);
                 RenderRevisioniColoured(lines);
             } else if (resultType == "File Coinvolti") {
                 var raw = _reportParser.Parse(_fullReportOutput, "File Coinvolti - Raw");
                 var groupBy = cmbGroupBy.SelectedItem?.ToString() ?? "Revisione";
-                var model = _revisionRenderingService.BuildFileCoinvoltiModel(raw, groupBy, _revisionStates);
+                var model = _revisionRenderingService.BuildFileCoinvoltiModel(raw, groupBy, _revisionStates, _perIssueRevisionStates);
                 RenderFileCoinvoltiModel(model);
             } else {
                 rtbOutput.Text = _reportParser.Parse(_fullReportOutput, resultType);
@@ -459,9 +461,12 @@ namespace SVNMergeCheckerUI {
 
                 var (color, symbol) = GetStateVisual(state.Value);
 
-                // Replace any leading '=>' or '==' with the state symbol in square brackets
+                // Replace any leading '=>' or '==', più l'eventuale simbolo di stato testuale già
+                // presente nel report (scritto da MergeStateLabel, es. "[▶]"), con il marcatore ">"
+                // seguito dal simbolo colorato calcolato da GetStateVisual. Questo evita di avere
+                // il simbolo duplicato (uno testuale dal report, uno colorato dalla UI).
                 var displayed = System.Text.RegularExpressions.Regex.Replace(
-                                line, @"^(\s*)(=>|==)\s*", "$1> " + symbol + " ");
+                                line, @"^(\s*)(=>|==)\s*(\[[^\]]*\]\s*)?", "$1> " + symbol + " ");
 
                 // If there was no leading marker, prepend the symbol
                 if (!displayed.Trim().StartsWith("> " + symbol + " "))

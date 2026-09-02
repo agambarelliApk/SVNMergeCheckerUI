@@ -15,6 +15,15 @@ namespace SVNMergeCheckerUI {
         // ----------------------------------------------------------------
         // Entry point principale
         // ----------------------------------------------------------------
+        // Aggregato interno prodotto da un'esecuzione per-issue: contiene i dati
+        // "grezzi" della singola issue prima della fusione con le altre.
+        private sealed record IssueRunResult(
+            string Issue,
+            Dictionary<int, RevisionInfo> Details,
+            List<int> ToProcess,
+            Dictionary<int, List<string>> Tree,
+            DateTime SearchMinDate);
+
         public async Task<SvnCheckerResult> RunAsync(
             SvnCheckerParameters p,
             IProgress<string> progress,
@@ -26,43 +35,64 @@ namespace SVNMergeCheckerUI {
                           ?? throw new InvalidOperationException(
                               $"Impossibile recuperare l'URL dalla sorgente '{p.SourceRepository}'.");
 
-            // 2. Recupero revisioni iniziali
-            var details = new Dictionary<int, RevisionInfo>();
-            var toProcess = new List<int>();
+            Dictionary<int, RevisionInfo> details;
+            List<int> toProcess;
+            Dictionary<int, List<string>> tree;
+            DateTime searchMinDate;
 
-            if (p.Issues.Count > 0)
-                await FindRevisionsByIssuesAsync(p.Issues, repoUrl, p.MaxNewRevs, details, toProcess, progress, ct, timeoutMs);
-            else
+            if (p.Issues.Count > 0) {
+                // Flusso per-issue: una sola chiamata svn log a monte, poi ciclo per issue.
+                progress.Report("[-] Scansione log per identificare le issue...");
+                var xml = await RunSvnXmlAsync(new[] { "log", "-l", "500", "--xml", repoUrl }, ct, timeoutMs);
+
+                var perIssueResults = new List<IssueRunResult>();
+                foreach (var issue in p.Issues) {
+                    ct.ThrowIfCancellationRequested();
+                    progress.Report($"\n===== [Issue {issue}] Elaborazione =====");
+                    var perIssue = await RunSingleIssueAsync(issue, xml, p, repoUrl, progress, ct, timeoutMs);
+                    perIssueResults.Add(perIssue);
+                }
+
+                // Fusione risultati per-issue
+                (details, toProcess, tree, searchMinDate) = MergeIssueResults(perIssueResults);
+            } else {
+                // Flusso manuale invariato: single-shot come da comportamento precedente.
+                details = new Dictionary<int, RevisionInfo>();
+                toProcess = new List<int>();
                 await LoadManualRevisionsAsync(p.Revisions, repoUrl, p.MaxNewRevs, details, toProcess, progress, ct, timeoutMs);
+
+                if (toProcess.Count == 0) {
+                    progress.Report("[!] Nessuna revisione da elaborare.");
+                    return new SvnCheckerResult();
+                }
+
+                var earliestUserRevDate = details.Values.Select(r => r.Date)
+                                           .DefaultIfEmpty(DateTime.Now).Min();
+                searchMinDate = p.SearchMinDateDays > 0
+                    ? earliestUserRevDate.AddDays(-p.SearchMinDateDays)
+                    : DateTime.MinValue;
+
+                tree = new Dictionary<int, List<string>>();
+                var processedFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var rev in toProcess) tree[rev] = new List<string>();
+
+                await AnalyzeDependenciesAsync(
+                    toProcess, tree, processedFiles, details,
+                    repoUrl, searchMinDate, p.MaxNewRevs, progress, ct, timeoutMs);
+            }
 
             if (toProcess.Count == 0) {
                 progress.Report("[!] Nessuna revisione da elaborare.");
                 return new SvnCheckerResult();
             }
 
-            var earliestUserRevDate = details.Values.Select(r => r.Date)
-                                       .DefaultIfEmpty(DateTime.Now).Min();
-            var searchMinDate = p.SearchMinDateDays > 0
-                ? earliestUserRevDate.AddDays(-p.SearchMinDateDays)
-                : DateTime.MinValue;
-
-            // 3. Analisi ciclica dipendenze
-            var tree = new Dictionary<int, List<string>>();
-            var processedFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var rev in toProcess) tree[rev] = new List<string>();
-
-            await AnalyzeDependenciesAsync(
-                toProcess, tree, processedFiles, details,
-                repoUrl, searchMinDate, p.MaxNewRevs, progress, ct, timeoutMs);
-
-            // 4. Revisioni già mergiate (svn mergeinfo + SkipRevisions)
+            // Revisioni già mergiate (svn mergeinfo + SkipRevisions)
             progress.Report("\n[-] Confronto con le revisioni già mergiate...");
             var merged = await _svn.GetMergedRevisionsAsync(repoUrl, p.WorkingCopy, ct, timeoutMs);
             var mergedSet = new HashSet<int>(merged);
             foreach (var s in p.SkipRevisions) mergedSet.Add(s);
 
             // Soglia: massimo numero di revisione tra le revisioni dirette ancora da mergiare.
-            // Le dipendenze indirette con numero superiore a questa soglia sono evidenziate come "Alta".
             var directPendingMax = details.Values
                 .Where(info => info.ParentRev == null && !mergedSet.Contains(info.Number))
                 .Select(info => (int?)info.Number)
@@ -70,42 +100,41 @@ namespace SVNMergeCheckerUI {
                 .Max();
 
             foreach (var info in details.Values) {
-                var isMerged = mergedSet.Contains(info.Number);
+                info.DisplayState = ComputeDisplayState(info, mergedSet, directPendingMax);
 
-                if (info.Direction == DependencyDirection.Next) {
-                    info.DisplayState = isMerged
-                        ? RevisionDisplayState.DipendenzaSuccessivaMergiata
-                        : RevisionDisplayState.DipendenzaSuccessivaDaMergiare;
-                } else if (info.Direction == DependencyDirection.Previous) {
-                    info.DisplayState = isMerged
-                        ? RevisionDisplayState.DipendenzaPrecedenteMergiata
-                        : RevisionDisplayState.DipendenzaPrecedenteDaMergiare;
-                } else if (isMerged) {
-                    info.DisplayState = RevisionDisplayState.Mergiato;
-                } else if (info.ParentRev == null) {
-                    info.DisplayState = RevisionDisplayState.DaMergiareDiretta;
-                } else if (directPendingMax.HasValue && info.Number > directPendingMax.Value) {
-                    info.DisplayState = RevisionDisplayState.DaMergiareIndirettaAlta;
-                } else {
-                    info.DisplayState = RevisionDisplayState.DaMergiareIndiretta;
+                // Stato calcolato nel contesto di ciascuna issue che referenzia questa revisione:
+                // la stessa revisione può essere "diretta" per un'issue e "dipendenza" per un'altra
+                // (vedi PerIssueRoles), quindi il simbolo mostrato in sezione 1/3 del report deve
+                // poter differire da un'issue all'altra invece di essere sempre lo stesso.
+                foreach (var (issueKey, role) in info.PerIssueRoles) {
+                    info.PerIssueDisplayStates[issueKey] = ComputeDisplayState(
+                        info.Number, role.Direction, role.ParentRevNumber, mergedSet, directPendingMax);
                 }
             }
 
             var revisionStates = details.Values.ToDictionary(info => info.Number, info => info.DisplayState);
+            var perIssueRevisionStates = new Dictionary<string, IReadOnlyDictionary<int, RevisionDisplayState>>(StringComparer.OrdinalIgnoreCase);
+            foreach (var issue in p.Issues) {
+                var issueDict = new Dictionary<int, RevisionDisplayState>();
+                foreach (var info in details.Values) {
+                    if (info.PerIssueDisplayStates.TryGetValue(issue, out var st)) {
+                        issueDict[info.Number] = st;
+                    }
+                }
+                perIssueRevisionStates[issue] = issueDict;
+            }
 
-            // Emette il marker noto alla GUI per popolare _mergedRevisions
             progress.Report($"##MERGED_REVISIONS:{string.Join(",", mergedSet)}");
-            // Emette il marker con lo stato a 4 valori di ogni revisione (M=Mergiato, D=Diretta, I=Indiretta, X=IndirettaAlta)
             progress.Report($"##REVISION_STATES:{string.Join(",", revisionStates.Select(kv => $"{kv.Key}={StateCode(kv.Value)}"))}");
 
-            // 5. Build testo report (stesso formato atteso da ReportParserService)
+            // Build testo report (stesso formato atteso da ReportParserService)
             var reportText = BuildReportText(p, repoUrl, details, toProcess, tree, searchMinDate);
 
             if (!string.IsNullOrWhiteSpace(p.OutFile)) {
                 try {
                     await File.WriteAllTextAsync(p.OutFile, reportText, Encoding.UTF8, ct);
                     progress.Report("\n\n\n\n" +                                               "===============================================================================================================================================================" +
-                        $"\n[OK] Report salvato in: {p.OutFile}");                    
+                        $"\n[OK] Report salvato in: {p.OutFile}");
                 } catch {
                     progress.Report("Non è stato possible salvare il file di report./nVerificare l'esistenza e l'accessibilità del percorso ");
                 }
@@ -116,43 +145,212 @@ namespace SVNMergeCheckerUI {
                 DependencyTree = tree,
                 MergedRevisions = mergedSet,
                 RevisionStates = revisionStates,
+                PerIssueRevisionStates = perIssueRevisionStates,
                 ReportText = reportText
             };
         }
 
         // ----------------------------------------------------------------
-        // Sezione 2-a: scansione log per Issue
+        // Esecuzione di una singola issue (usa svn log pre-caricato)
         // ----------------------------------------------------------------
-        private async Task FindRevisionsByIssuesAsync(
-            IReadOnlyList<string> issues,
+        private async Task<IssueRunResult> RunSingleIssueAsync(
+            string issue,
+            XmlDocument? preFetchedLog,
+            SvnCheckerParameters p,
             string repoUrl,
-            int maxRevs,
-            Dictionary<int, RevisionInfo> details,
-            List<int> toProcess,
             IProgress<string> progress,
             CancellationToken ct,
             int timeoutMs) {
-            progress.Report("[-] Scansione log per identificare le issue...");
-            var xml = await RunSvnXmlAsync(new[] { "log", "-l", "500", "--xml", repoUrl }, ct, timeoutMs);
-            if (xml is null) return;
+            var details = new Dictionary<int, RevisionInfo>();
+            var toProcess = new List<int>();
 
-            foreach (XmlElement entry in xml.SelectNodes("/log/logentry")!) {
-                ct.ThrowIfCancellationRequested();
-                if (!int.TryParse(entry.GetAttribute("revision"), out var rev)) continue;
-                if (!DateTime.TryParse(entry.SelectSingleNode("date")?.InnerText, out var date)) date = DateTime.MinValue;
-                var auth = entry.SelectSingleNode("author")?.InnerText.Trim() ?? "Unknown";
-                var msg = entry.SelectSingleNode("msg")?.InnerText.Trim() ?? string.Empty;
+            if (preFetchedLog is not null) {
+                foreach (XmlElement entry in preFetchedLog.SelectNodes("/log/logentry")!) {
+                    ct.ThrowIfCancellationRequested();
+                    if (!int.TryParse(entry.GetAttribute("revision"), out var rev)) continue;
+                    if (!DateTime.TryParse(entry.SelectSingleNode("date")?.InnerText, out var date)) date = DateTime.MinValue;
+                    var auth = entry.SelectSingleNode("author")?.InnerText.Trim() ?? "Unknown";
+                    var msg = entry.SelectSingleNode("msg")?.InnerText.Trim() ?? string.Empty;
 
-                foreach (var issue in issues) {
-                    if (msg.Contains(issue, StringComparison.OrdinalIgnoreCase)) {
-                        TryAddRevision(rev, date, auth, msg, maxRevs, details, toProcess);
-                        if (details.ContainsKey(rev)) {
-                            details[rev].MatchedIssues.Add(issue);
-                            details[rev].issues = string.Join(", ", details[rev].MatchedIssues);
-                        }
+                    if (!msg.Contains(issue, StringComparison.OrdinalIgnoreCase)) continue;
+
+                    TryAddRevision(rev, date, auth, msg, p.MaxNewRevs, details, toProcess);
+                    if (details.ContainsKey(rev)) {
+                        details[rev].MatchedIssues.Add(issue);
+                        details[rev].issues = string.Join(", ", details[rev].MatchedIssues);
                     }
                 }
             }
+
+            if (toProcess.Count == 0) {
+                progress.Report($"  [!] Issue '{issue}': nessuna revisione trovata.");
+                return new IssueRunResult(issue, details, toProcess,
+                    new Dictionary<int, List<string>>(), DateTime.Now);
+            }
+
+            var earliestUserRevDate = details.Values.Select(r => r.Date)
+                                       .DefaultIfEmpty(DateTime.Now).Min();
+            var searchMinDate = p.SearchMinDateDays > 0
+                ? earliestUserRevDate.AddDays(-p.SearchMinDateDays)
+                : DateTime.MinValue;
+
+            var tree = new Dictionary<int, List<string>>();
+            var processedFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var rev in toProcess) tree[rev] = new List<string>();
+
+            await AnalyzeDependenciesAsync(
+                toProcess, tree, processedFiles, details,
+                repoUrl, searchMinDate, p.MaxNewRevs, progress, ct, timeoutMs);
+
+            // Registra, per ciascuna revisione trovata in questa issue, il ruolo (diretta o
+            // dipendente + direzione) che ha nel contesto di questa specifica issue. Necessario
+            // perché la stessa revisione può avere ruoli diversi in issue diverse e la fusione
+            // successiva (MergeIssueResults) collassa Direction/ParentRev su un unico valore.
+            foreach (var (rev, info) in details) {
+                info.PerIssueRoles[issue] = new PerIssueRole(info.ParentRev?.Number, info.Direction);
+            }
+
+            return new IssueRunResult(issue, details, toProcess, tree, searchMinDate);
+        }
+
+        // ----------------------------------------------------------------
+        // Fusione dei risultati per-issue in strutture globali unificate
+        // ----------------------------------------------------------------
+        private static (Dictionary<int, RevisionInfo> details,
+                        List<int> toProcess,
+                        Dictionary<int, List<string>> tree,
+                        DateTime searchMinDate)
+            MergeIssueResults(List<IssueRunResult> perIssueResults) {
+            var details = new Dictionary<int, RevisionInfo>();
+            var tree = new Dictionary<int, List<string>>();
+            // Legami "dipendente -> genitore" scoperti durante l'analisi di una specifica issue,
+            // da risolvere in un secondo momento (a dizionario globale ormai completo) per
+            // individuare i casi in cui la stessa relazione di file coinvolge due issue diverse
+            // (es. una revisione dipendenza di file per l'issue A è anche revisione diretta
+            // dell'issue B): vedi RegisterCrossIssueLinks.
+            var pendingCrossLinks = new List<(int DependentRev, int ParentRevNumber, string SourceIssue)>();
+
+            foreach (var res in perIssueResults) {
+                foreach (var (rev, info) in res.Details) {
+                    if (info.ParentRev is not null)
+                        pendingCrossLinks.Add((rev, info.ParentRev.Number, res.Issue));
+
+                    if (!details.TryGetValue(rev, out var existing)) {
+                        details[rev] = info;
+                    } else {
+                        foreach (var mi in info.MatchedIssues) existing.MatchedIssues.Add(mi);
+                        existing.issues = string.Join(", ", existing.MatchedIssues);
+
+                        foreach (var f in info.Files) {
+                            if (!existing.Files.Contains(f, StringComparer.OrdinalIgnoreCase))
+                                existing.Files.Add(f);
+                        }
+
+                        // Riporta sull'istanza "canonica" i ruoli per-issue registrati sull'istanza
+                        // scartata: senza questo passaggio, le informazioni di ruolo raccolte in
+                        // RunSingleIssueAsync per issue diverse dalla prima incontrata andrebbero perse.
+                        foreach (var (issueKey, role) in info.PerIssueRoles) {
+                            existing.PerIssueRoles[issueKey] = role;
+                        }
+
+                        // Se in un'altra issue la revisione è "diretta" (None) prevale sul dipendente
+                        // come stato GLOBALE (usato per sezione 2/UI), ma il ruolo per-issue specifico
+                        // resta comunque tracciato in PerIssueRoles per la sezione 1/3 del report.
+                        if (existing.Direction != DependencyDirection.None &&
+                            info.Direction == DependencyDirection.None) {
+                            existing.Direction = DependencyDirection.None;
+                            existing.ParentRev = null;
+                        }
+                    }
+                }
+
+                foreach (var (key, children) in res.Tree) {
+                    if (!tree.TryGetValue(key, out var list)) {
+                        list = new List<string>();
+                        tree[key] = list;
+                    }
+                    foreach (var c in children) {
+                        if (!list.Contains(c)) list.Add(c);
+                    }
+                }
+            }
+
+            // Ri-collega ParentRev alle istanze "canoniche" presenti in 'details': durante la
+            // fusione la prima istanza incontrata per una revisione diventa quella canonica, ma i
+            // suoi ParentRev possono ancora puntare a istanze scartate (di un'altra issue) prive
+            // delle fusioni successive (MatchedIssues/Files aggiornati). Senza questo passaggio,
+            // camminare la catena ParentRev (es. in ResolveOwningIssues) può "perdere" revisioni.
+            foreach (var info in details.Values) {
+                if (info.ParentRev is not null && details.TryGetValue(info.ParentRev.Number, out var canonicalParent)) {
+                    info.ParentRev = canonicalParent;
+                }
+            }
+
+            RegisterCrossIssueLinks(details, pendingCrossLinks);
+
+            var toProcess = details.Keys.Order().ToList();
+            var searchMinDate = perIssueResults
+                .Where(r => r.ToProcess.Count > 0)
+                .Select(r => r.SearchMinDate)
+                .DefaultIfEmpty(DateTime.Now)
+                .Min();
+
+            return (details, toProcess, tree, searchMinDate);
+        }
+
+        // ----------------------------------------------------------------
+        // Segnala i legami "stesso file coinvolto" tra revisioni dirette di issue diverse, anche
+        // quando una delle due è stata riclassificata come "diretta" (ParentRev azzerato) durante
+        // la fusione dei risultati per-issue. Va eseguita dopo che 'details' contiene già tutte le
+        // revisioni di tutte le issue, per non dipendere dall'ordine di elaborazione delle issue.
+        // ----------------------------------------------------------------
+        private static void RegisterCrossIssueLinks(
+            Dictionary<int, RevisionInfo> details,
+            List<(int DependentRev, int ParentRevNumber, string SourceIssue)> pendingCrossLinks) {
+            foreach (var (dependentRevNum, parentRevNum, sourceIssue) in pendingCrossLinks) {
+                if (dependentRevNum == parentRevNum) continue;
+                if (!details.TryGetValue(dependentRevNum, out var dependentRev)) continue;
+                if (!details.TryGetValue(parentRevNum, out var parentRev)) continue;
+
+                foreach (var otherIssue in dependentRev.MatchedIssues) {
+                    if (string.Equals(otherIssue, sourceIssue, StringComparison.OrdinalIgnoreCase)) continue;
+                    parentRev.CrossIssueDependencies.Add(otherIssue);
+                    dependentRev.CrossIssueDependencies.Add(sourceIssue);
+                }
+            }
+        }
+
+        // ----------------------------------------------------------------
+        // Calcolo dello stato di visualizzazione di una revisione
+        // ----------------------------------------------------------------
+        private static RevisionDisplayState ComputeDisplayState(
+            RevisionInfo info, HashSet<int> mergedSet, int? directPendingMax) =>
+            ComputeDisplayState(info.Number, info.Direction, info.ParentRev?.Number, mergedSet, directPendingMax);
+
+        // Overload esplicito su Direction/ParentRevNumber, usato sia per lo stato globale
+        // (Direction/ParentRev "collassati" da MergeIssueResults) sia per lo stato calcolato nel
+        // contesto di una singola issue (a partire da RevisionInfo.PerIssueRoles), dato che la
+        // stessa revisione può avere ruoli differenti in issue differenti.
+        private static RevisionDisplayState ComputeDisplayState(
+            int revisionNumber, DependencyDirection direction, int? parentRevNumber,
+            HashSet<int> mergedSet, int? directPendingMax) {
+            var isMerged = mergedSet.Contains(revisionNumber);
+
+            if (direction == DependencyDirection.Next) {
+                return isMerged
+                    ? RevisionDisplayState.DipendenzaSuccessivaMergiata
+                    : RevisionDisplayState.DipendenzaSuccessivaDaMergiare;
+            }
+            if (direction == DependencyDirection.Previous) {
+                return isMerged
+                    ? RevisionDisplayState.DipendenzaPrecedenteMergiata
+                    : RevisionDisplayState.DipendenzaPrecedenteDaMergiare;
+            }
+            if (isMerged) return RevisionDisplayState.Mergiato;
+            if (parentRevNumber == null) return RevisionDisplayState.DaMergiareDiretta;
+            if (directPendingMax.HasValue && revisionNumber > directPendingMax.Value)
+                return RevisionDisplayState.DaMergiareIndirettaAlta;
+            return RevisionDisplayState.DaMergiareIndiretta;
         }
 
         // ----------------------------------------------------------------
@@ -300,31 +498,54 @@ namespace SVNMergeCheckerUI {
 
             // Costruisce il dizionario issue?revisioni (usato sia in sezione 1 che 3)
             var issueToRevisions = BuildIssueToRevisionsMap(p.Issues, toProcess, details);
-            var orphanRevisions = toProcess.Where(r => details[r].MatchedIssues.Count == 0).Order().ToList();
+            // Orfane per issue: una revisione è orfana per l'issue X se X non la matcha direttamente
+            // (MatchedIssues) ma appartiene comunque al grafo di dipendenze scoperto durante
+            // l'elaborazione di X (PerIssueRoles contiene X). Non si può usare un unico insieme
+            // "globale" di orfane (MatchedIssues.Count == 0), perché la stessa revisione può essere
+            // diretta per un'issue e dipendenza per un'altra nella stessa esecuzione multi-issue.
+            var orphansByIssue = BuildOrphansByIssueMap(p.Issues, toProcess, details);
+            var assignedOrphans = new HashSet<int>(orphansByIssue.Values.SelectMany(x => x));
+            var unresolvedOrphans = toProcess
+                .Where(r => details[r].MatchedIssues.Count == 0 && !assignedOrphans.Contains(r))
+                .Order().ToList();
 
             // Sezione 1: dinamica in base alla presenza di Issue
             if (p.Issues.Count > 0) {
                 sb.Append("1. REVISIONI RAGGRUPPATE PER ISSUE:");
 
                 foreach (var issue in p.Issues) {
-                    if (!issueToRevisions.ContainsKey(issue)) continue; // Fix 1: header solo se ci sono revisioni
+                    var hasDirect = issueToRevisions.ContainsKey(issue);
+                    var hasOrphans = orphansByIssue.TryGetValue(issue, out var issueOrphans) && issueOrphans.Count > 0;
+                    if (!hasDirect && !hasOrphans) continue;
 
-                    sb.AppendLine($"\n  [{issue}]");
-                    foreach (var rev in issueToRevisions[issue].Order()) {
-                        var d = details[rev];
-                        var desc = d.Message.Replace("\n", " ").Replace("\r", "");
-                        if (desc.Length > 70) desc = desc[..67] + "...";
-                        sb.AppendLine($"     => {rev} del {d.Date:dd/MM/yyyy HH:mm} [{d.Author}] : {desc} {MergeStateLabel(d.DisplayState)}");
+                    sb.AppendLine($"\n=== [{issue}] ===");
+                    if (hasDirect) {
+                        foreach (var rev in issueToRevisions[issue].Order()) {
+                            var d = details[rev];
+                            var desc = d.Message.Replace("\n", " ").Replace("\r", "");
+                            if (desc.Length > 70) desc = desc[..67] + "...";
+                            sb.AppendLine($"     => {MergeStateLabel(StateForIssue(d, issue))} {rev} del {d.Date:dd/MM/yyyy HH:mm} [{d.Author}] : {desc}{CrossIssueNote(d)}");
+                        }
+                    }
+
+                    if (hasOrphans) {
+                        sb.AppendLine("  --- Revisioni senza issue diretta ---");
+                        foreach (var rev in issueOrphans!.Order()) {
+                            var d = details[rev];
+                            var desc = d.Message.Replace("\n", " ").Replace("\r", "");
+                            if (desc.Length > 70) desc = desc[..67] + "...";
+                            sb.AppendLine($"   => {MergeStateLabel(StateForIssue(d, issue))} {rev} del {d.Date:dd/MM/yyyy HH:mm} [{d.Author}] : {desc}{CrossIssueNote(d)}");
+                        }
                     }
                 }
 
-                if (orphanRevisions.Count > 0) {
-                    sb.AppendLine("\n  [Revisioni di dipendenza senza issue diretta]");
-                    foreach (var rev in orphanRevisions) {
+                if (unresolvedOrphans.Count > 0) {
+                    sb.AppendLine("\n=== [Revisioni di dipendenza senza issue diretta] ===");
+                    foreach (var rev in unresolvedOrphans) {
                         var d = details[rev];
                         var desc = d.Message.Replace("\n", " ").Replace("\r", "");
                         if (desc.Length > 70) desc = desc[..67] + "...";
-                        sb.AppendLine($"    => {rev} del {d.Date:dd/MM/yyyy HH:mm} [{d.Author}] : {desc} {MergeStateLabel(d.DisplayState)}");
+                        sb.AppendLine($"    => {MergeStateLabel(d.DisplayState)} {rev} del {d.Date:dd/MM/yyyy HH:mm} [{d.Author}] : {desc}{CrossIssueNote(d)}");
                     }
                 }
             } else {
@@ -334,7 +555,7 @@ namespace SVNMergeCheckerUI {
                     var d = details[rev];
                     var desc = d.Message.Replace("\n", " ").Replace("\r", "");
                     if (desc.Length > 70) desc = desc[..67] + "...";
-                    sb.AppendLine($"    => {rev} del {d.Date:dd/MM/yyyy HH:mm} [{d.Author}] : {desc} {MergeStateLabel(d.DisplayState)}");
+                    sb.AppendLine($"    => {MergeStateLabel(d.DisplayState)} {rev} del {d.Date:dd/MM/yyyy HH:mm} [{d.Author}] : {desc}");
                 }
             }
             sb.AppendLine();
@@ -343,9 +564,16 @@ namespace SVNMergeCheckerUI {
                 sb.Append("2. STRUTTURA AD ALBERO DELLE REVISIONI - DIPENDENZE RAGRUPPATE PER ISSUE:");
                 // Sezione 2: dinamica in base alla presenza di Issue (usa dizionario issue?revisioni)
                 foreach (var issue in p.Issues) {
-                    if (!issueToRevisions.ContainsKey(issue)) continue; // Fix 1: header solo se ci sono revisioni
-                    sb.AppendLine($"\n[{issue}]");
-                    foreach (var rev in issueToRevisions[issue].Order()) {
+                    var hasDirect = issueToRevisions.ContainsKey(issue);
+                    var hasOrphans = orphansByIssue.TryGetValue(issue, out var issueOrphans) && issueOrphans.Count > 0;
+                    if (!hasDirect && !hasOrphans) continue;
+
+                    sb.AppendLine($"\n=== [{issue}] ===");
+                    var issueRevs = new List<int>();
+                    if (hasDirect) issueRevs.AddRange(issueToRevisions[issue]);
+                    if (hasOrphans) issueRevs.AddRange(issueOrphans!);
+
+                    foreach (var rev in issueRevs.Distinct().Order()) {
                         sb.AppendLine($"  {rev}");
                         if (tree.TryGetValue(rev, out var children) && children.Count > 0)
                             foreach (var c in children) sb.AppendLine($"    > {c}");
@@ -373,23 +601,42 @@ namespace SVNMergeCheckerUI {
             if (p.Issues.Count > 0) {
                 bool isFirtsIssue = true;
                 foreach (var issue in p.Issues) {
-                    if (!issueToRevisions.ContainsKey(issue)) continue; // Fix 1: header solo se ci sono revisioni
-                    
-                    sb.AppendLine($"[{issue}]");
-                    foreach (var rev in issueToRevisions[issue].Order()) {
-                        sb.AppendLine($"> REVISIONE {rev}:");
-                        var files = details[rev].Files;
-                        if (files.Count > 0)
-                            foreach (var f in files) sb.AppendLine($"  - {f}");
-                        else
-                            sb.AppendLine("  - Nessun file rilevato o operazione di sola proprietà.");
-                        sb.AppendLine("----------------------------------------------------");
+                    var hasDirect = issueToRevisions.ContainsKey(issue);
+                    var hasOrphans = orphansByIssue.TryGetValue(issue, out var issueOrphans) && issueOrphans.Count > 0;
+                    if (!hasDirect && !hasOrphans) continue;
+
+                    sb.AppendLine($"=== [{issue}] ===");
+                    if (hasDirect) {
+                        foreach (var rev in issueToRevisions[issue].Order()) {
+                            var d = details[rev];
+                            sb.AppendLine($"> REVISIONE {rev}:{CrossIssueNote(d)}");
+                            var files = d.Files;
+                            if (files.Count > 0)
+                                foreach (var f in files) sb.AppendLine($"  - {f}");
+                            else
+                                sb.AppendLine("  - Nessun file rilevato o operazione di sola proprietà.");
+                            sb.AppendLine("----------------------------------------------------");
+                        }
+                    }
+
+                    if (hasOrphans) {
+                        sb.AppendLine("--- Revisioni senza issue diretta ---");
+                        foreach (var rev in issueOrphans!.Order()) {
+                            var d = details[rev];
+                            sb.AppendLine($"> REVISIONE {rev}:{CrossIssueNote(d)}");
+                            var files = d.Files;
+                            if (files.Count > 0)
+                                foreach (var f in files) sb.AppendLine($"  - {f}");
+                            else
+                                sb.AppendLine("  - Nessun file rilevato o operazione di sola proprietà.");
+                            sb.AppendLine("----------------------------------------------------");
+                        }
                     }
                 }
 
-                if (orphanRevisions.Count > 0) {
-                    sb.AppendLine("\n[Revisioni al di fuori delle issue inserite dall'utente]");
-                    foreach (var rev in orphanRevisions) {
+                if (unresolvedOrphans.Count > 0) {
+                    sb.AppendLine("\n=== [Revisioni al di fuori delle issue inserite dall'utente] ===");
+                    foreach (var rev in unresolvedOrphans) {
                         sb.AppendLine($"> REVISIONE {rev}:");
                         var files = details[rev].Files;
                         if (files.Count > 0)
@@ -422,6 +669,17 @@ namespace SVNMergeCheckerUI {
         // ----------------------------------------------------------------
         // Helpers report
         // ----------------------------------------------------------------
+        private static string CrossIssueNote(RevisionInfo d) =>
+            d.CrossIssueDependencies.Count > 0
+                ? $" (correlata anche a: {string.Join(", ", d.CrossIssueDependencies.OrderBy(x => x, StringComparer.OrdinalIgnoreCase))})"
+                : string.Empty;
+
+        // Stato di visualizzazione da usare per una revisione nel contesto di una specifica
+        // issue: se è stato calcolato un ruolo per-issue (PerIssueDisplayStates) lo si usa,
+        // altrimenti si ricade sullo stato "globale" (DisplayState) calcolato da MergeIssueResults.
+        private static RevisionDisplayState StateForIssue(RevisionInfo d, string issue) =>
+            d.PerIssueDisplayStates.TryGetValue(issue, out var state) ? state : d.DisplayState;
+
         private static string MergeStateLabel(RevisionDisplayState state) => state switch {
             RevisionDisplayState.Mergiato => "[\u2714]",
             RevisionDisplayState.DaMergiareDiretta => "[\u25B6]",
@@ -457,6 +715,33 @@ namespace SVNMergeCheckerUI {
                 foreach (var issue in info.MatchedIssues) {
                     if (!map.ContainsKey(issue)) map[issue] = new List<int>();
                     if (!map[issue].Contains(rev)) map[issue].Add(rev); // Fix 2: evita duplicati
+                }
+            }
+            return map;
+        }
+
+        // Per ciascuna issue X, una revisione è "orfana" (senza issue diretta) se X non la matcha
+        // direttamente (MatchedIssues) ma la revisione appartiene comunque al grafo di dipendenze
+        // scoperto durante l'elaborazione di X (PerIssueRoles contiene la chiave X, popolata in
+        // RunSingleIssueAsync per ogni revisione trovata analizzando quella specifica issue).
+        // Non si usa MatchedIssues.Count == 0 come pre-filtro globale perché la stessa revisione può
+        // essere diretta per un'issue e dipendenza per un'altra nella stessa esecuzione multi-issue.
+        private static Dictionary<string, List<int>> BuildOrphansByIssueMap(
+            IReadOnlyList<string> issues,
+            List<int> toProcess,
+            Dictionary<int, RevisionInfo> details) {
+            var map = new Dictionary<string, List<int>>(StringComparer.OrdinalIgnoreCase);
+            foreach (var issue in issues) {
+                foreach (var rev in toProcess) {
+                    var info = details[rev];
+                    if (info.MatchedIssues.Contains(issue)) continue;
+                    if (!info.PerIssueRoles.ContainsKey(issue)) continue;
+
+                    if (!map.TryGetValue(issue, out var list)) {
+                        list = new List<int>();
+                        map[issue] = list;
+                    }
+                    if (!list.Contains(rev)) list.Add(rev);
                 }
             }
             return map;

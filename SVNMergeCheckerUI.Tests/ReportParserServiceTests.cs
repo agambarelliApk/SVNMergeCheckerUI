@@ -138,6 +138,34 @@ public class ReportParserServiceTests
         Assert.Equal(RevisionDisplayState.DaMergiareIndirettaAlta, line.state);
     }
 
+    [Fact]
+    public void ParseRevisioniLines_UsesPerIssueState_WhenAvailable()
+    {
+        var section =
+            "=== [ISSUE-A] ===\n" +
+            "  => 12345 del 01/01/2024 [mario] : commit A\n" +
+            "=== [ISSUE-B] ===\n" +
+            "  => 12345 del 01/01/2024 [mario] : commit A\n";
+
+        var globalStates = new Dictionary<int, RevisionDisplayState>
+        {
+            [12345] = RevisionDisplayState.DaMergiareDiretta
+        };
+
+        var perIssueStates = new Dictionary<string, IReadOnlyDictionary<int, RevisionDisplayState>>
+        {
+            ["ISSUE-A"] = new Dictionary<int, RevisionDisplayState> { [12345] = RevisionDisplayState.DaMergiareDiretta },
+            ["ISSUE-B"] = new Dictionary<int, RevisionDisplayState> { [12345] = RevisionDisplayState.DipendenzaPrecedenteDaMergiare }
+        };
+
+        var result = _sut.ParseRevisioniLines(section, globalStates, perIssueStates);
+
+        var revLines = result.Where(r => r.state.HasValue).ToList();
+        Assert.Equal(2, revLines.Count);
+        Assert.Equal(RevisionDisplayState.DaMergiareDiretta, revLines[0].state);
+        Assert.Equal(RevisionDisplayState.DipendenzaPrecedenteDaMergiare, revLines[1].state);
+    }
+
     // ---------------------------------------------------------------
     // PivotFileCoinvolti
     // ---------------------------------------------------------------

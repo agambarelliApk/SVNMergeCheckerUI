@@ -8,7 +8,9 @@ namespace SVNMergeCheckerUI
         string Parse(string fullReportOutput, string resultType);
         string PivotFileCoinvolti(string section);
         IReadOnlyList<(string line, RevisionDisplayState? state)> ParseRevisioniLines(
-            string section, IReadOnlyDictionary<int, RevisionDisplayState> revisionStates);
+            string section,
+            IReadOnlyDictionary<int, RevisionDisplayState> revisionStates,
+            IReadOnlyDictionary<string, IReadOnlyDictionary<int, RevisionDisplayState>>? perIssueRevisionStates = null);
         int? ExtractRevisionNumber(string text);
         string NormalizeRevisionText(string text);
     }
@@ -77,21 +79,40 @@ namespace SVNMergeCheckerUI
 
         /// <summary>
         /// Parses the "Elenco Revisioni" section line by line and annotates each line
-        /// with whether its revision number belongs to the already-merged set.
+        /// with its revision display state (checking per-issue states first if available).
         /// </summary>
         public IReadOnlyList<(string line, RevisionDisplayState? state)> ParseRevisioniLines(
-            string section, IReadOnlyDictionary<int, RevisionDisplayState> revisionStates)
+            string section,
+            IReadOnlyDictionary<int, RevisionDisplayState> revisionStates,
+            IReadOnlyDictionary<string, IReadOnlyDictionary<int, RevisionDisplayState>>? perIssueRevisionStates = null)
         {
             var result = new List<(string, RevisionDisplayState?)>();
+            string? currentIssue = null;
+
             foreach (var rawLine in section.Split('\n'))
             {
                 var line = rawLine.TrimEnd('\r');
+                var trimmed = line.Trim();
+                var normalized = trimmed.Trim('=', ' ');
+                if (normalized.StartsWith("[") && normalized.EndsWith("]"))
+                {
+                    currentIssue = normalized.Trim('[', ']');
+                }
+
                 var match = RevisionPattern.Match(line);
                 RevisionDisplayState? state = null;
-                if (match.Success && int.TryParse(match.Groups["rev"].Value, out var rev)
-                    && revisionStates.TryGetValue(rev, out var found))
+                if (match.Success && int.TryParse(match.Groups["rev"].Value, out var rev))
                 {
-                    state = found;
+                    if (currentIssue != null && perIssueRevisionStates != null &&
+                        perIssueRevisionStates.TryGetValue(currentIssue, out var issueStates) &&
+                        issueStates.TryGetValue(rev, out var perIssueState))
+                    {
+                        state = perIssueState;
+                    }
+                    else if (revisionStates.TryGetValue(rev, out var globalState))
+                    {
+                        state = globalState;
+                    }
                 }
                 result.Add((line, state));
             }
@@ -127,10 +148,15 @@ namespace SVNMergeCheckerUI
                 var line = rawLine.TrimEnd('\r');
                 var trimmed = line.TrimStart();
 
-                // Blocco issue: [ISSUE_LABEL]
-                if (trimmed.StartsWith("[") && trimmed.EndsWith("]"))
+                // Separatore di sotto-gruppo "--- Revisioni senza issue diretta ---": ignorato
+                if (trimmed.StartsWith("---") && trimmed.EndsWith("---"))
+                    continue;
+
+                var normalized = trimmed.Trim('=', ' ');
+                // Blocco issue: [ISSUE_LABEL] o === [ISSUE_LABEL] ===
+                if (normalized.StartsWith("[") && normalized.EndsWith("]"))
                 {
-                    currentIssue = trimmed;
+                    currentIssue = normalized;
                     currentRevHeader = null;
                 }
                 // Intestazione revisione: > REVISIONE r123 del ...
