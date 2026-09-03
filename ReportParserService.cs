@@ -7,11 +7,13 @@ namespace SVNMergeCheckerUI
     {
         string Parse(string fullReportOutput, string resultType);
         string PivotFileCoinvolti(string section);
+        IReadOnlyDictionary<string, IReadOnlyDictionary<int, List<int>>> ParseAlberoDipendenze(string section);
         IReadOnlyList<(string line, RevisionDisplayState? state)> ParseRevisioniLines(
             string section,
             IReadOnlyDictionary<int, RevisionDisplayState> revisionStates,
             IReadOnlyDictionary<string, IReadOnlyDictionary<int, RevisionDisplayState>>? perIssueRevisionStates = null,
-            string groupBy = "Issue");
+            string groupBy = "Issue",
+            IReadOnlyDictionary<string, IReadOnlyDictionary<int, List<int>>>? perIssueDependencyTree = null);
         int? ExtractRevisionNumber(string text);
         string NormalizeRevisionText(string text);
     }
@@ -78,6 +80,66 @@ namespace SVNMergeCheckerUI
                 "2. STRUTTURA AD ALBERO");
         }
 
+        public IReadOnlyDictionary<string, IReadOnlyDictionary<int, List<int>>> ParseAlberoDipendenze(string section)
+        {
+            var result = new Dictionary<string, Dictionary<int, List<int>>>(StringComparer.OrdinalIgnoreCase);
+            if (string.IsNullOrWhiteSpace(section))
+                return result.ToDictionary(k => k.Key, k => (IReadOnlyDictionary<int, List<int>>)k.Value, StringComparer.OrdinalIgnoreCase);
+
+            string currentIssue = string.Empty;
+            int? currentParentRev = null;
+            var childRevRegex = new Regex(@"(?:da file in\s+|>\s*r?)(?<rev>\d{1,7})", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+            foreach (var rawLine in section.Split('\n'))
+            {
+                var line = rawLine.TrimEnd('\r');
+                var trimmed = line.Trim();
+                if (string.IsNullOrWhiteSpace(trimmed)) continue;
+
+                var normalized = trimmed.Trim('=', ' ');
+                if (normalized.StartsWith("[") && normalized.EndsWith("]"))
+                {
+                    currentIssue = normalized.Trim('[', ']');
+                    if (!result.ContainsKey(currentIssue))
+                        result[currentIssue] = new Dictionary<int, List<int>>();
+                    currentParentRev = null;
+                    continue;
+                }
+
+                if (string.IsNullOrEmpty(currentIssue))
+                {
+                    currentIssue = "$DEFAULT$";
+                    if (!result.ContainsKey(currentIssue))
+                        result[currentIssue] = new Dictionary<int, List<int>>();
+                }
+
+                if (!trimmed.StartsWith(">") && !trimmed.StartsWith("-"))
+                {
+                    var parentRev = ExtractRevisionNumber(trimmed);
+                    if (parentRev.HasValue)
+                    {
+                        currentParentRev = parentRev.Value;
+                        if (!result[currentIssue].ContainsKey(currentParentRev.Value))
+                            result[currentIssue][currentParentRev.Value] = new List<int>();
+                    }
+                }
+                else if (currentParentRev.HasValue && !trimmed.Contains("Nessuna dipendenza", StringComparison.OrdinalIgnoreCase))
+                {
+                    var m = childRevRegex.Match(trimmed);
+                    if (m.Success && int.TryParse(m.Groups["rev"].Value, out var childRev))
+                    {
+                        if (!result[currentIssue][currentParentRev.Value].Contains(childRev))
+                            result[currentIssue][currentParentRev.Value].Add(childRev);
+                    }
+                }
+            }
+
+            return result.ToDictionary(
+                kvp => kvp.Key,
+                kvp => (IReadOnlyDictionary<int, List<int>>)kvp.Value,
+                StringComparer.OrdinalIgnoreCase);
+        }
+
         private static int GetMergeStatePriority(RevisionDisplayState? state) => state switch
         {
             RevisionDisplayState.DaMergiareDiretta => 1,
@@ -101,11 +163,13 @@ namespace SVNMergeCheckerUI
             string section,
             IReadOnlyDictionary<int, RevisionDisplayState> revisionStates,
             IReadOnlyDictionary<string, IReadOnlyDictionary<int, RevisionDisplayState>>? perIssueRevisionStates = null,
-            string groupBy = "Issue")
+            string groupBy = "Issue",
+            IReadOnlyDictionary<string, IReadOnlyDictionary<int, List<int>>>? perIssueDependencyTree = null)
         {
             string? currentIssue = null;
 
-            if (string.Equals(groupBy, "Merge Suggerito", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(groupBy, "Merge", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(groupBy, "Merge Suggerito", StringComparison.OrdinalIgnoreCase))
             {
                 var revCandidates = new Dictionary<int, (string line, RevisionDisplayState? state)>();
 
@@ -147,12 +211,13 @@ namespace SVNMergeCheckerUI
 
                 var mergeResult = new List<(string, RevisionDisplayState?)>
                 {
-                    ("SEQUENZA DI MERGE CONSIGLIATA", null)
+                    ("REVISIONI ORDINATE PER MERGE", null)
                 };
 
                 foreach (var kvp in revCandidates.OrderBy(kv => kv.Key))
                 {
-                    if (kvp.Value.state == RevisionDisplayState.Mergiato || kvp.Value.state == RevisionDisplayState.DipendenzaPrecedenteMergiata)
+                    if (kvp.Value.state == RevisionDisplayState.Mergiato ||
+                        kvp.Value.state == RevisionDisplayState.DipendenzaPrecedenteMergiata)
                         continue;
 
                     mergeResult.Add((kvp.Value.line.Replace("    ", "  "), kvp.Value.state));
@@ -161,36 +226,164 @@ namespace SVNMergeCheckerUI
                 return mergeResult;
             }
 
+            // GroupBy "Issue" (or default)
             var result = new List<(string, RevisionDisplayState?)>();
-            currentIssue = null;
+            var issueBlocks = new List<(string? issue, List<string> lines)>();
+            string? currentBlockIssue = null;
+            var currentLines = new List<string>();
 
             foreach (var rawLine in section.Split('\n'))
             {
                 var line = rawLine.TrimEnd('\r');
                 var trimmed = line.Trim();
                 var normalized = trimmed.Trim('=', ' ');
+
                 if (normalized.StartsWith("[") && normalized.EndsWith("]"))
                 {
-                    currentIssue = normalized.Trim('[', ']');
+                    if (currentLines.Count > 0 || currentBlockIssue != null)
+                    {
+                        issueBlocks.Add((currentBlockIssue, currentLines));
+                        currentLines = new List<string>();
+                    }
+                    currentBlockIssue = normalized.Trim('[', ']');
+                }
+                currentLines.Add(line);
+            }
+            if (currentLines.Count > 0 || currentBlockIssue != null)
+            {
+                issueBlocks.Add((currentBlockIssue, currentLines));
+            }
+
+            foreach (var (issueKey, blockLines) in issueBlocks)
+            {
+                var revMap = new Dictionary<int, (string cleanLine, RevisionDisplayState? state)>();
+                var revOrder = new List<int>();
+                var nonRevLines = new List<string>();
+                var hadRevisionsInBlock = false;
+
+                IReadOnlyDictionary<int, List<int>>? issueTree = null;
+                if (issueKey != null && perIssueDependencyTree != null && perIssueDependencyTree.TryGetValue(issueKey, out var foundTree))
+                {
+                    issueTree = foundTree;
+                }
+                else if (perIssueDependencyTree != null && perIssueDependencyTree.TryGetValue("$DEFAULT$", out var defTree))
+                {
+                    issueTree = defTree;
                 }
 
-                var match = RevisionPattern.Match(line);
-                RevisionDisplayState? state = null;
-                if (match.Success && int.TryParse(match.Groups["rev"].Value, out var rev))
+                foreach (var line in blockLines)
                 {
-                    if (currentIssue != null && perIssueRevisionStates != null &&
-                        perIssueRevisionStates.TryGetValue(currentIssue, out var issueStates) &&
-                        issueStates.TryGetValue(rev, out var perIssueState))
+                    var trimmed = line.Trim();
+
+                    // Skip the separator "--- Revisioni senza issue diretta ---" when tree is present
+                    if (issueTree != null && trimmed.StartsWith("---") && trimmed.EndsWith("---"))
+                        continue;
+
+                    var match = RevisionPattern.Match(line);
+                    if (match.Success && int.TryParse(match.Groups["rev"].Value, out var rev))
                     {
-                        state = perIssueState;
+                        hadRevisionsInBlock = true;
+                        RevisionDisplayState? state = null;
+                        if (issueKey != null && perIssueRevisionStates != null &&
+                            perIssueRevisionStates.TryGetValue(issueKey, out var issueStates) &&
+                            issueStates.TryGetValue(rev, out var perIssueState))
+                        {
+                            state = perIssueState;
+                        }
+                        else if (revisionStates.TryGetValue(rev, out var globalState))
+                        {
+                            state = globalState;
+                        }
+
+                        if (state == RevisionDisplayState.DipendenzaPrecedenteMergiata)
+                            continue;
+
+                        var clean = Regex.Replace(trimmed, @"^(?:=>|==|>)\s*", "");
+                        if (!revMap.ContainsKey(rev))
+                        {
+                            revMap[rev] = (clean, state);
+                            revOrder.Add(rev);
+                        }
                     }
-                    else if (revisionStates.TryGetValue(rev, out var globalState))
+                    else
                     {
-                        state = globalState;
+                        nonRevLines.Add(line);
                     }
                 }
-                result.Add((line.Replace("    ", "  "), state));
+
+                if (hadRevisionsInBlock && revMap.Count == 0 && issueKey != null) continue;
+
+                foreach (var nrl in nonRevLines)
+                {
+                    result.Add((nrl.Replace("    ", "  "), null));
+                }
+
+                if (revMap.Count == 0) continue;
+
+                if (issueTree != null)
+                {
+                    var childToParent = new Dictionary<int, int>();
+                    foreach (var kvp in issueTree)
+                    {
+                        var parent = kvp.Key;
+                        if (!revMap.ContainsKey(parent)) continue;
+
+                        foreach (var child in kvp.Value)
+                        {
+                            if (revMap.ContainsKey(child) && child != parent && !childToParent.ContainsKey(child))
+                            {
+                                childToParent[child] = parent;
+                            }
+                        }
+                    }
+
+                    var roots = revOrder.Where(r => !childToParent.ContainsKey(r)).ToList();
+                    var visited = new HashSet<int>();
+
+                    void EmitTree(int nodeRev, int level)
+                    {
+                        if (!visited.Add(nodeRev)) return;
+                        if (!revMap.TryGetValue(nodeRev, out var nodeInfo)) return;
+
+                        var indent = new string(' ', 2 + level * 2);
+                        var formatted = $"{indent}=> {nodeInfo.cleanLine}";
+                        result.Add((formatted, nodeInfo.state));
+
+                        if (issueTree.TryGetValue(nodeRev, out var children))
+                        {
+                            foreach (var cRev in children)
+                            {
+                                if (revMap.ContainsKey(cRev) && !visited.Contains(cRev))
+                                {
+                                    EmitTree(cRev, level + 1);
+                                }
+                            }
+                        }
+                    }
+
+                    foreach (var root in roots)
+                    {
+                        EmitTree(root, 0);
+                    }
+
+                    foreach (var rev in revOrder)
+                    {
+                        if (!visited.Contains(rev))
+                        {
+                            EmitTree(rev, 0);
+                        }
+                    }
+                }
+                else
+                {
+                    foreach (var rev in revOrder)
+                    {
+                        var nodeInfo = revMap[rev];
+                        result.Add(($"  => {nodeInfo.cleanLine}", nodeInfo.state));
+                    }
+                }
             }
+
             return result;
         }
 

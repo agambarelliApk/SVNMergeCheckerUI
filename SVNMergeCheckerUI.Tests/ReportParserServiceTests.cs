@@ -184,7 +184,7 @@ public class ReportParserServiceTests
             [12348] = RevisionDisplayState.DaMergiareIndiretta
         };
 
-        var result = _sut.ParseRevisioniLines(section, states, groupBy: "Merge Suggerito");
+        var result = _sut.ParseRevisioniLines(section, states, groupBy: "Merge");
 
         // Header + 2 non-merged revisions (12346 Mergiato is removed)
         Assert.Equal(3, result.Count);
@@ -208,7 +208,7 @@ public class ReportParserServiceTests
             ["ISSUE-B"] = new Dictionary<int, RevisionDisplayState> { [12345] = RevisionDisplayState.DaMergiareDiretta }
         };
 
-        var result = _sut.ParseRevisioniLines(section, new Dictionary<int, RevisionDisplayState>(), perIssueStates, groupBy: "Merge Suggerito");
+        var result = _sut.ParseRevisioniLines(section, new Dictionary<int, RevisionDisplayState>(), perIssueStates, groupBy: "Merge");
 
         Assert.Equal(2, result.Count);
         Assert.Equal(("REVISIONI ORDINATE PER MERGE", (RevisionDisplayState?)null), result[0]);
@@ -224,11 +224,11 @@ public class ReportParserServiceTests
             [12345] = RevisionDisplayState.Mergiato
         };
 
-        var result = _sut.ParseRevisioniLines(section, states, groupBy: "Merge Suggerito");
+        var result = _sut.ParseRevisioniLines(section, states, groupBy: "Merge");
 
         // Header + 12340 (12345 is Mergiato, so excluded)
         Assert.Equal(2, result.Count);
-        Assert.Equal(("SEQUENZA DI MERGE CONSIGLIATA", (RevisionDisplayState?)null), result[0]);
+        Assert.Equal(("REVISIONI ORDINATE PER MERGE", (RevisionDisplayState?)null), result[0]);
         Assert.Equal(("  => 12340 del 01/01/2024 [mario] : commit 0", (RevisionDisplayState?)null), result[1]);
     }
 
@@ -287,5 +287,121 @@ public class ReportParserServiceTests
 
         Assert.Contains("> file_a.cs", result);
         Assert.DoesNotContain("Nessun file trovato", result);
+    }
+
+    // ---------------------------------------------------------------
+    // ParseAlberoDipendenze & Multi-layer Tree ParseRevisioniLines
+    // ---------------------------------------------------------------
+
+    [Fact]
+    public void ParseAlberoDipendenze_ExtractsPerIssueTreeCorrectly()
+    {
+        var section =
+            "2. STRUTTURA AD ALBERO DELLE REVISIONI - DIPENDENZE RAGRUPPATE PER ISSUE:\n" +
+            "=== [ISSUE-1] ===\n" +
+            "  10001\n" +
+            "    > revisione precedente derivata da 10001 da file in 10002\n" +
+            "    > revisione successiva derivata da 10001 da file in 10003\n" +
+            "  10002\n" +
+            "    > revisione precedente derivata da 10002 da file in 10004\n" +
+            "  10005\n" +
+            "    > [Nessuna dipendenza trovata]\n";
+
+        var tree = _sut.ParseAlberoDipendenze(section);
+
+        Assert.True(tree.ContainsKey("ISSUE-1"));
+        var issueTree = tree["ISSUE-1"];
+
+        Assert.Equal(3, issueTree.Count);
+        Assert.Equal(new[] { 10002, 10003 }, issueTree[10001]);
+        Assert.Equal(new[] { 10004 }, issueTree[10002]);
+        Assert.Empty(issueTree[10005]);
+    }
+
+    [Fact]
+    public void ParseRevisioniLines_WithPerIssueDependencyTree_RendersMultiLayerHierarchyWithTwoSpacesIndent()
+    {
+        var section =
+            "1. REVISIONI RAGGRUPPATE PER ISSUE:\n" +
+            "=== [ISSUE-1] ===\n" +
+            "     => 10001 del 01/01/2024 10:00 [mario] : commit root 1\n" +
+            "     => 10005 del 01/01/2024 10:00 [mario] : commit root 2\n" +
+            "  --- Revisioni senza issue diretta ---\n" +
+            "     => 10002 del 01/01/2024 09:00 [mario] : commit dep child 1\n" +
+            "     => 10004 del 01/01/2024 08:00 [mario] : commit dep grandchild\n" +
+            "     => 10003 del 01/01/2024 11:00 [mario] : commit dep child 2\n" +
+            "     => 10006 del 01/01/2024 12:00 [mario] : commit dep child of root 2\n";
+
+        var alberoSection =
+            "2. STRUTTURA AD ALBERO DELLE REVISIONI - DIPENDENZE RAGRUPPATE PER ISSUE:\n" +
+            "=== [ISSUE-1] ===\n" +
+            "  10001\n" +
+            "    > revisione precedente derivata da 10001 da file in 10002\n" +
+            "    > revisione successiva derivata da 10001 da file in 10003\n" +
+            "  10002\n" +
+            "    > revisione precedente derivata da 10002 da file in 10004\n" +
+            "  10005\n" +
+            "    > revisione successiva derivata da 10005 da file in 10006\n";
+
+        var states = new Dictionary<int, RevisionDisplayState>
+        {
+            [10001] = RevisionDisplayState.DaMergiareDiretta,
+            [10002] = RevisionDisplayState.DipendenzaPrecedenteDaMergiare,
+            [10003] = RevisionDisplayState.DipendenzaSuccessivaDaMergiare,
+            [10004] = RevisionDisplayState.DipendenzaPrecedenteDaMergiare,
+            [10005] = RevisionDisplayState.DaMergiareDiretta,
+            [10006] = RevisionDisplayState.DipendenzaSuccessivaDaMergiare
+        };
+
+        var tree = _sut.ParseAlberoDipendenze(alberoSection);
+        var lines = _sut.ParseRevisioniLines(section, states, groupBy: "Issue", perIssueDependencyTree: tree);
+
+        var revLines = lines.Where(l => l.state.HasValue).Select(l => l.line).ToList();
+
+        // 10001 (level 0: 2 spaces)
+        //   10002 (level 1: 4 spaces)
+        //     10004 (level 2: 6 spaces)
+        //   10003 (level 1: 4 spaces)
+        // 10005 (level 0: 2 spaces)
+        //   10006 (level 1: 4 spaces)
+        Assert.Equal(6, revLines.Count);
+        Assert.StartsWith("  => 10001", revLines[0]);
+        Assert.StartsWith("    => 10002", revLines[1]);
+        Assert.StartsWith("      => 10004", revLines[2]);
+        Assert.StartsWith("    => 10003", revLines[3]);
+        Assert.StartsWith("  => 10005", revLines[4]);
+        Assert.StartsWith("    => 10006", revLines[5]);
+    }
+
+    [Fact]
+    public void ParseRevisioniLines_FiltersDipendenzaPrecedenteMergiata_AndExcludesEmptyIssueBlock()
+    {
+        var section =
+            "=== [ISSUE-VALID] ===\n" +
+            "     => 10001 del 01/01/2024 10:00 [mario] : commit 1\n" +
+            "     => 10002 del 01/01/2024 09:00 [mario] : commit 2 (merged dep)\n" +
+            "=== [ISSUE-MERGED-ONLY] ===\n" +
+            "     => 10003 del 01/01/2024 08:00 [mario] : commit 3 (merged dep)\n";
+
+        var states = new Dictionary<int, RevisionDisplayState>
+        {
+            [10001] = RevisionDisplayState.DaMergiareDiretta,
+            [10002] = RevisionDisplayState.DipendenzaPrecedenteMergiata,
+            [10003] = RevisionDisplayState.DipendenzaPrecedenteMergiata
+        };
+
+        var tree = new Dictionary<string, IReadOnlyDictionary<int, List<int>>>();
+        var lines = _sut.ParseRevisioniLines(section, states, groupBy: "Issue", perIssueDependencyTree: tree);
+
+        var revLines = lines.Where(l => l.state.HasValue).Select(l => l.line).ToList();
+        var allLines = lines.Select(l => l.line).ToList();
+
+        // Only 10001 should remain
+        Assert.Single(revLines);
+        Assert.Contains("10001", revLines[0]);
+
+        // ISSUE-MERGED-ONLY should not be present
+        Assert.Contains(allLines, l => l.Contains("[ISSUE-VALID]"));
+        Assert.DoesNotContain(allLines, l => l.Contains("[ISSUE-MERGED-ONLY]"));
     }
 }

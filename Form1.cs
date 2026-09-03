@@ -460,7 +460,12 @@ namespace SVNMergeCheckerUI {
             if (resultType == "Elenco Revisioni") {
                 var section = _reportParser.Parse(_fullReportOutput, resultType);
                 var groupBy = cmbGroupBy.SelectedItem?.ToString() ?? "Issue";
-                var lines = _reportParser.ParseRevisioniLines(section, _revisionStates, _perIssueRevisionStates, groupBy);
+                IReadOnlyDictionary<string, IReadOnlyDictionary<int, List<int>>>? perIssueTree = null;
+                if (string.Equals(groupBy, "Issue", StringComparison.OrdinalIgnoreCase)) {
+                    var alberoSection = _reportParser.Parse(_fullReportOutput, "Albero Dipendenze");
+                    perIssueTree = _reportParser.ParseAlberoDipendenze(alberoSection);
+                }
+                var lines = _reportParser.ParseRevisioniLines(section, _revisionStates, _perIssueRevisionStates, groupBy, perIssueTree);
                 RenderRevisioniColoured(lines);
             } else if (resultType == "File Coinvolti") {
                 var raw = _reportParser.Parse(_fullReportOutput, "File Coinvolti - Raw");
@@ -481,9 +486,9 @@ namespace SVNMergeCheckerUI {
             RevisionDisplayState.DaMergiareIndiretta => (Color.Orange, "[\u2757]"),
             RevisionDisplayState.DaMergiareIndirettaAlta => (Color.Red, "[\u2714]"),
             RevisionDisplayState.DipendenzaSuccessivaMergiata => (Color.Red, "[\u2714]"),
-            RevisionDisplayState.DipendenzaSuccessivaDaMergiare => (Color.Orange, "[\u2757\u25B6]"),
+            RevisionDisplayState.DipendenzaSuccessivaDaMergiare => (Color.Orange, "[\u25B6]"),
             RevisionDisplayState.DipendenzaPrecedenteMergiata => (Color.Green, "[\u2714]"),
-            RevisionDisplayState.DipendenzaPrecedenteDaMergiare => (Color.DarkOrange, "[\u2757\u25B6]"),
+            RevisionDisplayState.DipendenzaPrecedenteDaMergiare => (Color.Brown, "[\u2757\u25B6]"),
             _ => (Color.Gray, "[?]")
         };
 

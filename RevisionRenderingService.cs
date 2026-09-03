@@ -151,17 +151,24 @@ namespace SVNMergeCheckerUI
 
                         var revNodes = issueToRevs[issueLabel]
                             .Select(rev => MakeRevisionMarkerNode(rev, revisionStates, issueStates, isMarkerHeader: true, indent: "    "))
+                            .Where(node => node.State != RevisionDisplayState.DipendenzaPrecedenteMergiata)
                             .ToList();
 
-                        issueNodes.Add(new FileCoinvoltiNode(
-                            FileCoinvoltiNodeKind.IssueHeaderNested,
-                            $"=== {issueLabel} ===",
-                            null, false, "", Array.Empty<string>(), revNodes));
+                        if (revNodes.Count > 0)
+                        {
+                            issueNodes.Add(new FileCoinvoltiNode(
+                                FileCoinvoltiNodeKind.IssueHeaderNested,
+                                $"=== {issueLabel} ===",
+                                null, false, "", Array.Empty<string>(), revNodes));
+                        }
                     }
 
-                    roots.Add(new FileCoinvoltiNode(
-                        FileCoinvoltiNodeKind.FileHeader,
-                        file, null, false, "", Array.Empty<string>(), issueNodes, TrailingBlankLine: true));
+                    if (issueNodes.Count > 0)
+                    {
+                        roots.Add(new FileCoinvoltiNode(
+                            FileCoinvoltiNodeKind.FileHeader,
+                            file, null, false, "", Array.Empty<string>(), issueNodes, TrailingBlankLine: true));
+                    }
                 }
             }
             else
@@ -174,12 +181,16 @@ namespace SVNMergeCheckerUI
 
                     var revNodes = revisions
                         .Select(r => MakeRevisionMarkerNode(r.revLabel, revisionStates, issueStates, isMarkerHeader: true, indent: "", files: r.files))
+                        .Where(node => node.State != RevisionDisplayState.DipendenzaPrecedenteMergiata)
                         .ToList();
 
-                    roots.Add(new FileCoinvoltiNode(
-                        FileCoinvoltiNodeKind.IssueHeaderTop,
-                        $"=== {issueLabel} ===",
-                        null, false, "", Array.Empty<string>(), revNodes, TrailingBlankLine: true));
+                    if (revNodes.Count > 0)
+                    {
+                        roots.Add(new FileCoinvoltiNode(
+                            FileCoinvoltiNodeKind.IssueHeaderTop,
+                            $"=== {issueLabel} ===",
+                            null, false, "", Array.Empty<string>(), revNodes, TrailingBlankLine: true));
+                    }
                 }
             }
 
