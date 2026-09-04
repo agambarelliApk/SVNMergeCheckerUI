@@ -6,12 +6,17 @@
     <Nullable>enable</Nullable>
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
+    <ApplicationIcon>.icon\Graphicloads-Polygon-Check.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
     <Compile Remove="SVNMergeCheckerUI.Tests\**" />
     <EmbeddedResource Remove="SVNMergeCheckerUI.Tests\**" />
     <None Remove="SVNMergeCheckerUI.Tests\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include=".icon\Graphicloads-Polygon-Check.ico" />
   </ItemGroup>
 
   <ItemGroup>

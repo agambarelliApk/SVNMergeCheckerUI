@@ -23,6 +23,7 @@
         ///  the contents of this method with the code editor.
         /// </summary>
         private void InitializeComponent() {
+            System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(Form1));
             grpDirectory = new GroupBox();
             lblWorkingCopy = new Label();
             txtWorkingCopy = new TextBox();
@@ -340,10 +341,10 @@
             // 
             // numSvnTimeout
             // 
+            numSvnTimeout.Increment = new decimal(new int[] { 5, 0, 0, 0 });
             numSvnTimeout.Location = new Point(304, 88);
             numSvnTimeout.Maximum = new decimal(new int[] { 600, 0, 0, 0 });
             numSvnTimeout.Minimum = new decimal(new int[] { 5, 0, 0, 0 });
-            numSvnTimeout.Increment = new decimal(new int[] { 5, 0, 0, 0 });
             numSvnTimeout.Name = "numSvnTimeout";
             numSvnTimeout.Size = new Size(80, 26);
             numSvnTimeout.TabIndex = 7;
@@ -492,6 +493,7 @@
             Controls.Add(grpElaborazioni);
             Controls.Add(grpRun);
             Controls.Add(grpResult);
+            Icon = (Icon)resources.GetObject("$this.Icon");
             MinimumSize = new Size(920, 720);
             Name = "Form1";
             Text = "SVN Merge Checker";
