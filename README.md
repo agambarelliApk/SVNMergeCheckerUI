@@ -34,10 +34,14 @@ uno strumento visuale per prevenire merge incompleti o inconsistenti prima di es
 - Analisi ciclica delle **dipendenze tra revisioni** basata sui file effettivamente modificati, estesa sia alle revisioni **precedenti** che a quelle **successive** nella cronologia SVN.
 - Rilevamento automatico delle revisioni **già mergiate** tramite `svn mergeinfo`.
 - Classificazione visiva dettagliata tramite simboli e colori:
-  - 🟢 **Verde (`[✓]`)** — già mergiata (revisione diretta).
-  - 🔵 **Blu (`[>]` / `[▶]`)** — da mergiare se revisione diretta (`[>]`), oppure già mergiata se dipendenza precedente (`[▶]`).
-  - 🟠 **Arancione (`[!]` / `[❗]`)** — da mergiare (dipendenza indiretta o dipendenza precedente/successiva).
-  - 🔴 **Rosso (`[X]` / `[❌]`)** — dipendenza indiretta alta (`[X]`) oppure dipendenza successiva già mergiata (`[❌]`).
+  - 🟢 **Verde (`[✔ ]` / `[✔]`)** — `Mergiato` (revisione già mergiata) oppure `DipendenzaPrecedenteMergiata` (dipendenza precedente già mergiata).
+  - 🔵 **Blu (`[▶]`)** — `DaMergiareDiretta` (revisione direttamente associata all'issue o inserita manualmente, ancora da mergiare).
+  - 🔵 **Blu (`[❗▶]`)** — `DipendenzaDirettaAltraIssuePrecedenteDaMergiare` (dipendenza temporale precedente da mergiare che è contemporaneamente revisione diretta di un'altra issue).
+  - ⚪ **Grigio chiaro (`[▶]`)** — `DipendenzaUtentePrecedenteDaMergiare` (revisione diretta utente emessa come dipendenza figlia all'interno della stessa issue).
+  - 🟠 **Arancione (`[❗]`)** — `DaMergiareIndiretta` (dipendenza indiretta ancora da mergiare).
+  - 🟠 **Arancione (`[▶]`)** — `DipendenzaSuccessivaDaMergiare` (dipendenza temporale successiva ancora da mergiare).
+  - 🔴 **Rosso (`[✔]`)** — `DaMergiareIndirettaAlta` (dipendenza indiretta più recente di tutte le dirette) oppure `DipendenzaSuccessivaMergiata` (dipendenza temporale successiva già mergiata).
+  - 🟤 **Marrone (`[❗▶]`)** — `DipendenzaPrecedenteDaMergiare` (dipendenza temporale precedente ancora da mergiare, non diretta per altre issue).
 - Viste multiple del report: elenco revisioni (raggruppabile per Issue o per Merge con ordine crescente ed esclusione dei già mergiati), albero delle dipendenze, file coinvolti (raggruppabili per
   issue/revisione o per file), log di console.
 - Generazione automatica del comando `svn merge` consigliato, limitato alle sole revisioni ancora da mergiare.

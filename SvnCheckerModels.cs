@@ -16,15 +16,16 @@ namespace SVNMergeCheckerUI
     );
 
     // Stati di visualizzazione:
-    // - Mergiato: revisione già mergiata
-    // - DaMergiareDiretta: revisione direttamente coinvolta (issue/manuale) ancora da mergiare
-    // - DaMergiareIndiretta: dipendenza indiretta ancora da mergiare
-    // - DaMergiareIndirettaAlta: dipendenza indiretta con numero di revisione superiore
-    //   rispetto a tutte le revisioni dirette ancora da mergiare
-    // - DipendenzaSuccessivaMergiata/DaMergiare: dipendenza scoperta tramite cronologia file,
-    //   con numero di revisione SUCCESSIVO a quella che l'ha originata
-    // - DipendenzaPrecedenteMergiata/DaMergiare: dipendenza scoperta tramite cronologia file,
-    //   con numero di revisione PRECEDENTE a quella che l'ha originata
+    // - Mergiato: revisione già mergiata nella working copy di destinazione (Verde, [? ])
+    // - DaMergiareDiretta: revisione direttamente associata all'issue o inserita manualmente dall'utente, ancora da mergiare (Blu, [?])
+    // - DaMergiareIndiretta: dipendenza indiretta scoperta durante l'analisi, ancora da mergiare (Arancione, [?])
+    // - DaMergiareIndirettaAlta: dipendenza indiretta con numero di revisione superiore a tutte le revisioni dirette ancora da mergiare (Rosso, [?])
+    // - DipendenzaSuccessivaMergiata: dipendenza scoperta tramite cronologia file successiva alla revisione sorgente, già mergiata (Rosso, [?])
+    // - DipendenzaSuccessivaDaMergiare: dipendenza scoperta tramite cronologia file successiva alla revisione sorgente, ancora da mergiare (Arancione, [?])
+    // - DipendenzaPrecedenteMergiata: dipendenza scoperta tramite cronologia file precedente alla revisione sorgente, già mergiata (Verde, [?])
+    // - DipendenzaPrecedenteDaMergiare: dipendenza scoperta tramite cronologia file precedente alla revisione sorgente, ancora da mergiare (Marrone, [??])
+    // - DipendenzaDirettaAltraIssuePrecedenteDaMergiare: dipendenza precedente di un'issue che è contemporaneamente revisione diretta di un'altra issue (Blu, [??])
+    // - DipendenzaUtentePrecedenteDaMergiare: revisione diretta dell'utente emessa come dipendenza figlia all'interno della stessa issue (Grigio chiaro, [?])
     public enum RevisionDisplayState {
         Mergiato,
         DaMergiareDiretta,
@@ -34,6 +35,7 @@ namespace SVNMergeCheckerUI
         DipendenzaSuccessivaDaMergiare,
         DipendenzaPrecedenteMergiata,
         DipendenzaPrecedenteDaMergiare,
+        DipendenzaDirettaAltraIssuePrecedenteDaMergiare,
         DipendenzaUtentePrecedenteDaMergiare
     }
 

@@ -461,11 +461,49 @@ namespace SVNMergeCheckerUI {
                 var section = _reportParser.Parse(_fullReportOutput, resultType);
                 var groupBy = cmbGroupBy.SelectedItem?.ToString() ?? "Issue";
                 IReadOnlyDictionary<string, IReadOnlyDictionary<int, List<int>>>? perIssueTree = null;
+                var effectivePerIssueRevisionStates = _perIssueRevisionStates;
+
                 if (string.Equals(groupBy, "Issue", StringComparison.OrdinalIgnoreCase)) {
                     var alberoSection = _reportParser.Parse(_fullReportOutput, "Albero Dipendenze");
                     perIssueTree = _reportParser.ParseAlberoDipendenze(alberoSection);
+
+                    if (perIssueTree != null && _perIssueRevisionStates.Count > 0) {
+                        // Raccoglie per ciascuna issue le relative revisioni dirette (DaMergiareDiretta)
+                        var directRevsByIssue = new Dictionary<string, HashSet<int>>(StringComparer.OrdinalIgnoreCase);
+                        foreach (var (issue, states) in _perIssueRevisionStates) {
+                            directRevsByIssue[issue] = states
+                                .Where(kvp => kvp.Value == RevisionDisplayState.DaMergiareDiretta)
+                                .Select(kvp => kvp.Key)
+                                .ToHashSet();
+                        }
+
+                        // Se una revisione diretta di issueA compare nell'albero di un'altra issueB come DipendenzaPrecedenteDaMergiare,
+                        // il suo stato in issueB viene aggiornato a DipendenzaDirettaAltraIssuePrecedenteDaMergiare (colore Blue con simbolo [❗▶]).
+                        var modifiedStates = _perIssueRevisionStates
+                            .ToDictionary(k => k.Key, k => new Dictionary<int, RevisionDisplayState>(k.Value), StringComparer.OrdinalIgnoreCase);
+
+                        foreach (var (issueA, directRevs) in directRevsByIssue) {
+                            foreach (var (issueB, treeB) in perIssueTree) {
+                                if (string.Equals(issueA, issueB, StringComparison.OrdinalIgnoreCase)) continue;
+
+                                if (modifiedStates.TryGetValue(issueB, out var statesB)) {
+                                    foreach (var rev in directRevs) {
+                                        var isChildInTreeB = treeB.Values.Any(children => children.Contains(rev));
+                                        if (isChildInTreeB && statesB.TryGetValue(rev, out var stateB) && stateB == RevisionDisplayState.DipendenzaPrecedenteDaMergiare) {
+                                            statesB[rev] = RevisionDisplayState.DipendenzaDirettaAltraIssuePrecedenteDaMergiare;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        effectivePerIssueRevisionStates = modifiedStates.ToDictionary(
+                            k => k.Key,
+                            k => (IReadOnlyDictionary<int, RevisionDisplayState>)k.Value,
+                            StringComparer.OrdinalIgnoreCase);
+                    }
                 }
-                var lines = _reportParser.ParseRevisioniLines(section, _revisionStates, _perIssueRevisionStates, groupBy, perIssueTree);
+                var lines = _reportParser.ParseRevisioniLines(section, _revisionStates, effectivePerIssueRevisionStates, groupBy, perIssueTree);
                 RenderRevisioniColoured(lines);
             } else if (resultType == "File Coinvolti") {
                 var raw = _reportParser.Parse(_fullReportOutput, "File Coinvolti - Raw");
@@ -481,15 +519,26 @@ namespace SVNMergeCheckerUI {
 
         // Colore e simbolo unico per ciascuno degli stati di visualizzazione delle revisioni.
         private static (Color Color, string Symbol) GetStateVisual(RevisionDisplayState state) => state switch {
+            // Revisione già mergiata nella working copy di destinazione
             RevisionDisplayState.Mergiato => (Color.Green, "[\u2714 ]"),
+            // Revisione diretta dell'issue da mergiare
             RevisionDisplayState.DaMergiareDiretta => (Color.Blue, "[\u25B6]"),
+            // Revisione diretta utente della stessa issue emessa come dipendenza figlia nell'albero
             RevisionDisplayState.DipendenzaUtentePrecedenteDaMergiare => (Color.LightGray, "[\u25B6]"),
+            // Dipendenza indiretta ancora da mergiare
             RevisionDisplayState.DaMergiareIndiretta => (Color.Orange, "[\u2757]"),
+            // Dipendenza indiretta con numero di revisione più alto delle dirette
             RevisionDisplayState.DaMergiareIndirettaAlta => (Color.Red, "[\u2714]"),
+            // Dipendenza temporale successiva già mergiata
             RevisionDisplayState.DipendenzaSuccessivaMergiata => (Color.Red, "[\u2714]"),
+            // Dipendenza temporale successiva da mergiare
             RevisionDisplayState.DipendenzaSuccessivaDaMergiare => (Color.Orange, "[\u25B6]"),
+            // Dipendenza temporale precedente già mergiata
             RevisionDisplayState.DipendenzaPrecedenteMergiata => (Color.Green, "[\u2714]"),
+            // Dipendenza temporale precedente da mergiare (non diretta in altre issue)
             RevisionDisplayState.DipendenzaPrecedenteDaMergiare => (Color.Brown, "[\u2757\u25B6]"),
+            // Dipendenza temporale precedente da mergiare che è revisione diretta di un'altra issue (cambia colore da Brown a Blue mantenendo il simbolo)
+            RevisionDisplayState.DipendenzaDirettaAltraIssuePrecedenteDaMergiare => (Color.Blue, "[\u2757\u25B6]"),
             _ => (Color.Gray, "[?]")
         };
 

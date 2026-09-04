@@ -771,6 +771,7 @@ namespace SVNMergeCheckerUI {
             RevisionDisplayState.DipendenzaSuccessivaDaMergiare => "[\u2757]",
             RevisionDisplayState.DipendenzaPrecedenteMergiata => "[\u25B6]",
             RevisionDisplayState.DipendenzaPrecedenteDaMergiare => "[\u2757]",
+            RevisionDisplayState.DipendenzaDirettaAltraIssuePrecedenteDaMergiare => "[\u2757]",
             _ => "[?]"
         };
 
@@ -784,6 +785,7 @@ namespace SVNMergeCheckerUI {
             RevisionDisplayState.DipendenzaSuccessivaDaMergiare => "SD",
             RevisionDisplayState.DipendenzaPrecedenteMergiata => "PM",
             RevisionDisplayState.DipendenzaPrecedenteDaMergiare => "PD",
+            RevisionDisplayState.DipendenzaDirettaAltraIssuePrecedenteDaMergiare => "PDD",
             _ => "?"
         };
 

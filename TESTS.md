@@ -46,6 +46,7 @@ Copertura attuale:
 - `ParseRevisioniLines_SplitsUserCollidingRevisions_AsDirectRootAndIndentedDependency`
 - `ParseRevisioniLines_UserCollisionNode_DoesNotEmitSubDependenciesUnderLightGrayNode`
 - `ParseRevisioniLines_SkipsDuplicateRevisionStateCombinationInTree`
+- `ParseRevisioniLines_DipendenzaDirettaAltraIssuePrecedenteDaMergiare_EmitsCorrectState`
 
 ### `ReportParserServiceGoldenFileTests`
 
@@ -120,9 +121,9 @@ Copertura attuale:
 ## Conclusione
 
 La suite di test esistente è compatibile con il progetto principale e il build della solution risulta
-corretto. Al momento sono presenti 51 test automatici, tutti verdi (`dotnet test`).
+corretto. Al momento sono presenti 52 test automatici, tutti verdi (`dotnet test`).
 
-Attività future possibili: introdurre un'astrazione `IProcessRunner` iniettabile per isolare
+Attività future possibili:
 completamente `Process.Start` in `SvnService`/`SvnCheckerHelper` e testare così anche il flusso
 completo di `RunAsync` (calcolo dei 4 stati) e la costruzione esatta degli argomenti CLI, senza
 dipendere da `svn.exe` installato sulla macchina di build.

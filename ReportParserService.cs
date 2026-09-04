@@ -143,6 +143,7 @@ namespace SVNMergeCheckerUI
         private static int GetMergeStatePriority(RevisionDisplayState? state) => state switch
         {
             RevisionDisplayState.DaMergiareDiretta => 1,
+            RevisionDisplayState.DipendenzaDirettaAltraIssuePrecedenteDaMergiare => 1,
             RevisionDisplayState.DipendenzaUtentePrecedenteDaMergiare => 1,
             RevisionDisplayState.DipendenzaSuccessivaMergiata => 2,
             RevisionDisplayState.DipendenzaPrecedenteMergiata => 3,

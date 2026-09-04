@@ -554,4 +554,39 @@ public class ReportParserServiceTests
         Assert.Equal(10003, _sut.ExtractRevisionNumber(revLines[1].line));
         Assert.Equal(10002, _sut.ExtractRevisionNumber(revLines[2].line));
     }
+
+    [Fact]
+    public void ParseRevisioniLines_DipendenzaDirettaAltraIssuePrecedenteDaMergiare_EmitsCorrectState()
+    {
+        var section =
+            "=== [ISSUE-2] ===\n" +
+            "     => 20001 del 01/01/2024 10:00 [mario] : commit root\n" +
+            "  --- Revisioni senza issue diretta ---\n" +
+            "     => 10001 del 01/01/2024 08:00 [mario] : cross issue dep\n";
+
+        var states = new Dictionary<int, RevisionDisplayState>
+        {
+            [20001] = RevisionDisplayState.DaMergiareDiretta,
+            [10001] = RevisionDisplayState.DipendenzaDirettaAltraIssuePrecedenteDaMergiare
+        };
+
+        var tree = new Dictionary<string, IReadOnlyDictionary<int, List<int>>>
+        {
+            ["ISSUE-2"] = new Dictionary<int, List<int>>
+            {
+                [20001] = new List<int> { 10001 },
+                [10001] = new List<int>()
+            }
+        };
+
+        var lines = _sut.ParseRevisioniLines(section, states, groupBy: "Issue", perIssueDependencyTree: tree);
+        var revLines = lines.Where(l => l.state.HasValue).ToList();
+
+        Assert.Equal(2, revLines.Count);
+        Assert.Equal(RevisionDisplayState.DaMergiareDiretta, revLines[0].state);
+        Assert.StartsWith("  => 20001", revLines[0].line);
+
+        Assert.Equal(RevisionDisplayState.DipendenzaDirettaAltraIssuePrecedenteDaMergiare, revLines[1].state);
+        Assert.StartsWith("    => 10001", revLines[1].line);
+    }
 }

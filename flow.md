@@ -47,7 +47,8 @@ funzioni collegate, con particolare attenzione alla gestione multi-issue e alle 
 
 - `RevisionInfo.DisplayState` è lo stato globale usato come fallback.
 - `RevisionInfo.PerIssueDisplayStates[issue]` è lo stato corretto da usare nel contesto della issue.
-- `RevisionDisplayState.DipendenzaUtentePrecedenteDaMergiare` (grigio chiaro `[?]`) rappresenta la dipendenza di una revisione utente che collide con un'altra revisione utente.
+- `RevisionDisplayState.DipendenzaUtentePrecedenteDaMergiare` (grigio chiaro `[?]`) rappresenta la dipendenza di una revisione utente che collide con un'altra revisione utente all'interno della stessa issue.
+- `RevisionDisplayState.DipendenzaDirettaAltraIssuePrecedenteDaMergiare` (blu `[??]`) rappresenta una dipendenza precedente di un'issue che è contemporaneamente revisione diretta da mergiare per un'altra issue.
 - `ReportParserService` e `RevisionRenderingService` devono sempre preferire lo stato per-issue quando disponibile.
 
 ## Sezioni report
