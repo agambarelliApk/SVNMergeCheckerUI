@@ -39,6 +39,13 @@ Copertura attuale:
 - `PivotFileCoinvolti_ReturnsInputUnchanged_WhenNoFilesFound`
 - `PivotFileCoinvolti_GroupsFilesByRevisionAndIssue`
 - `PivotFileCoinvolti_SkipsFilesMarkedAsNoneFound`
+- `ParseAlberoDipendenze_ExtractsPerIssueTreeCorrectly`
+- `ParseRevisioniLines_WithPerIssueDependencyTree_RendersMultiLayerHierarchyWithTwoSpacesIndent`
+- `ParseRevisioniLines_FiltersDipendenzaPrecedenteMergiata_AndExcludesEmptyIssueBlock`
+- `ParseRevisioniLines_PreservesDirectMergedAndUserCollisionRevisions`
+- `ParseRevisioniLines_SplitsUserCollidingRevisions_AsDirectRootAndIndentedDependency`
+- `ParseRevisioniLines_UserCollisionNode_DoesNotEmitSubDependenciesUnderLightGrayNode`
+- `ParseRevisioniLines_SkipsDuplicateRevisionStateCombinationInTree`
 
 ### `ReportParserServiceGoldenFileTests`
 
@@ -68,6 +75,9 @@ Copertura attuale:
 - `RunAsync_Throws_WhenRepoUrlCannotBeResolved`
 - `RunAsync_ReturnsEmptyResult_WhenNoIssuesAndNoRevisionsProvided`
 - `RunAsync_UsesResolvedRepoUrl_EvenWhenSourceRepositoryIsALocalPath`
+- `ParseDiffHunkRanges_ExtractsRangesCorrectly`
+- `CheckRangeCollision_DetectsCollisionAndDisjointCorrectly`
+- `CheckRangeCollision_EmptyRanges_FallbacksToTrue`
 
 Nota: i flussi che richiedono `svn log`/`svn diff` reali (calcolo dei 4 stati con issue/revisioni
 effettive) non sono ancora testabili in isolamento, perché `SvnCheckerHelper` invoca direttamente
@@ -110,7 +120,7 @@ Copertura attuale:
 ## Conclusione
 
 La suite di test esistente è compatibile con il progetto principale e il build della solution risulta
-corretto. Al momento sono presenti 41 test automatici, tutti verdi (`dotnet test`).
+corretto. Al momento sono presenti 51 test automatici, tutti verdi (`dotnet test`).
 
 Attività future possibili: introdurre un'astrazione `IProcessRunner` iniettabile per isolare
 completamente `Process.Start` in `SvnService`/`SvnCheckerHelper` e testare così anche il flusso

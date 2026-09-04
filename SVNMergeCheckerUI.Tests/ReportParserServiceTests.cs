@@ -404,4 +404,154 @@ public class ReportParserServiceTests
         Assert.Contains(allLines, l => l.Contains("[ISSUE-VALID]"));
         Assert.DoesNotContain(allLines, l => l.Contains("[ISSUE-MERGED-ONLY]"));
     }
+
+    [Fact]
+    public void ParseRevisioniLines_PreservesDirectMergedAndUserCollisionRevisions()
+    {
+        var section =
+            "=== [ISSUE-1] ===\n" +
+            "     => 10001 del 01/01/2024 10:00 [mario] : commit direct merged\n" +
+            "     => 10002 del 01/01/2024 09:00 [mario] : commit user collision\n";
+
+        var states = new Dictionary<int, RevisionDisplayState>
+        {
+            [10001] = RevisionDisplayState.Mergiato,
+            [10002] = RevisionDisplayState.DipendenzaUtentePrecedenteDaMergiare
+        };
+
+        var lines = _sut.ParseRevisioniLines(section, states, groupBy: "Issue");
+        var revLines = lines.Where(l => l.state.HasValue).ToList();
+
+        Assert.Equal(2, revLines.Count);
+        Assert.Equal(RevisionDisplayState.Mergiato, revLines[0].state);
+        Assert.Equal(RevisionDisplayState.DipendenzaUtentePrecedenteDaMergiare, revLines[1].state);
+    }
+
+    [Fact]
+    public void ParseRevisioniLines_SplitsUserCollidingRevisions_AsDirectRootAndIndentedDependency()
+    {
+        var section =
+            "=== [ISSUE-1] ===\n" +
+            "     => 10001 del 01/01/2024 10:00 [mario] : commit root\n" +
+            "     => 10002 del 01/01/2024 09:00 [mario] : commit user collision\n";
+
+        var states = new Dictionary<int, RevisionDisplayState>
+        {
+            [10001] = RevisionDisplayState.DaMergiareDiretta,
+            [10002] = RevisionDisplayState.DaMergiareDiretta
+        };
+
+        var tree = new Dictionary<string, IReadOnlyDictionary<int, List<int>>>
+        {
+            ["ISSUE-1"] = new Dictionary<int, List<int>>
+            {
+                [10001] = new List<int> { 10002 },
+                [10002] = new List<int>()
+            }
+        };
+
+        var lines = _sut.ParseRevisioniLines(section, states, groupBy: "Issue", perIssueDependencyTree: tree);
+        var revLines = lines.Where(l => l.state.HasValue).ToList();
+
+        // 10001 as root (DaMergiareDiretta, Blue)
+        // 10002 indented under 10001 (DipendenzaUtentePrecedenteDaMergiare, LightGray)
+        // 10002 as root (DaMergiareDiretta, Blue)
+        Assert.Equal(3, revLines.Count);
+        Assert.Equal(RevisionDisplayState.DaMergiareDiretta, revLines[0].state);
+        Assert.StartsWith("  => 10001", revLines[0].line);
+
+        Assert.Equal(RevisionDisplayState.DipendenzaUtentePrecedenteDaMergiare, revLines[1].state);
+        Assert.StartsWith("    => 10002", revLines[1].line);
+
+        Assert.Equal(RevisionDisplayState.DaMergiareDiretta, revLines[2].state);
+        Assert.StartsWith("  => 10002", revLines[2].line);
+    }
+
+    [Fact]
+    public void ParseRevisioniLines_UserCollisionNode_DoesNotEmitSubDependenciesUnderLightGrayNode()
+    {
+        var section =
+            "=== [ISSUE-1] ===\n" +
+            "     => 10001 del 01/01/2024 10:00 [mario] : commit root 1\n" +
+            "     => 10002 del 01/01/2024 09:00 [mario] : commit user collision\n" +
+            "  --- Revisioni senza issue diretta ---\n" +
+            "     => 10003 del 01/01/2024 08:00 [mario] : commit dep of 10002\n";
+
+        var states = new Dictionary<int, RevisionDisplayState>
+        {
+            [10001] = RevisionDisplayState.DaMergiareDiretta,
+            [10002] = RevisionDisplayState.DaMergiareDiretta,
+            [10003] = RevisionDisplayState.DipendenzaPrecedenteDaMergiare
+        };
+
+        var tree = new Dictionary<string, IReadOnlyDictionary<int, List<int>>>
+        {
+            ["ISSUE-1"] = new Dictionary<int, List<int>>
+            {
+                [10001] = new List<int> { 10002 },
+                [10002] = new List<int> { 10003 },
+                [10003] = new List<int>()
+            }
+        };
+
+        var lines = _sut.ParseRevisioniLines(section, states, groupBy: "Issue", perIssueDependencyTree: tree);
+        var revLines = lines.Where(l => l.state.HasValue).ToList();
+
+        // 1. 10001 as root (DaMergiareDiretta, Blue)
+        // 2. 10002 indented under 10001 (DipendenzaUtentePrecedenteDaMergiare, LightGray) - NO 10003 here
+        // 3. 10002 as root (DaMergiareDiretta, Blue)
+        // 4. 10003 indented under 10002 root (DipendenzaPrecedenteDaMergiare)
+        Assert.Equal(4, revLines.Count);
+        Assert.Equal(RevisionDisplayState.DaMergiareDiretta, revLines[0].state);
+        Assert.StartsWith("  => 10001", revLines[0].line);
+
+        Assert.Equal(RevisionDisplayState.DipendenzaUtentePrecedenteDaMergiare, revLines[1].state);
+        Assert.StartsWith("    => 10002", revLines[1].line);
+
+        Assert.Equal(RevisionDisplayState.DaMergiareDiretta, revLines[2].state);
+        Assert.StartsWith("  => 10002", revLines[2].line);
+
+        Assert.Equal(RevisionDisplayState.DipendenzaPrecedenteDaMergiare, revLines[3].state);
+        Assert.StartsWith("    => 10003", revLines[3].line);
+    }
+
+    [Fact]
+    public void ParseRevisioniLines_SkipsDuplicateRevisionStateCombinationInTree()
+    {
+        var section =
+            "=== [ISSUE-1] ===\n" +
+            "     => 10001 del 01/01/2024 10:00 [mario] : commit root 1\n" +
+            "     => 10002 del 01/01/2024 09:00 [mario] : commit root 2\n" +
+            "  --- Revisioni senza issue diretta ---\n" +
+            "     => 10003 del 01/01/2024 08:00 [mario] : shared dep\n";
+
+        var states = new Dictionary<int, RevisionDisplayState>
+        {
+            [10001] = RevisionDisplayState.DaMergiareDiretta,
+            [10002] = RevisionDisplayState.DaMergiareDiretta,
+            [10003] = RevisionDisplayState.DipendenzaPrecedenteDaMergiare
+        };
+
+        var tree = new Dictionary<string, IReadOnlyDictionary<int, List<int>>>
+        {
+            ["ISSUE-1"] = new Dictionary<int, List<int>>
+            {
+                [10001] = new List<int> { 10003 },
+                [10002] = new List<int> { 10003 },
+                [10003] = new List<int>()
+            }
+        };
+
+        var lines = _sut.ParseRevisioniLines(section, states, groupBy: "Issue", perIssueDependencyTree: tree);
+        var revLines = lines.Where(l => l.state.HasValue).ToList();
+
+        // 10001 root
+        //   10003 dep under 10001
+        // 10002 root
+        //   10003 NOT repeated under 10002 since (10003, DipendenzaPrecedenteDaMergiare) was already emitted
+        Assert.Equal(3, revLines.Count);
+        Assert.Equal(10001, _sut.ExtractRevisionNumber(revLines[0].line));
+        Assert.Equal(10003, _sut.ExtractRevisionNumber(revLines[1].line));
+        Assert.Equal(10002, _sut.ExtractRevisionNumber(revLines[2].line));
+    }
 }

@@ -87,4 +87,47 @@ public class SvnCheckerHelperTests
         // ma la risoluzione dell'URL tramite ISvnService deve comunque avvenire senza eccezioni.
         Assert.Empty(result.Revisions);
     }
+
+    [Fact]
+    public void ParseDiffHunkRanges_ExtractsRangesCorrectly()
+    {
+        var diff =
+            "Index: file.cs\n" +
+            "===================================================================\n" +
+            "--- file.cs (revision 100)\n" +
+            "+++ file.cs (revision 101)\n" +
+            "@@ -10,5 +12,8 @@\n" +
+            " context\n" +
+            "@@ -50,2 +55,1 @@\n" +
+            " context 2\n";
+
+        var ranges = SvnCheckerHelper.ParseDiffHunkRanges(diff);
+
+        Assert.Equal(2, ranges.Count);
+        Assert.Equal((10, 19), ranges[0]);
+        Assert.Equal((50, 55), ranges[1]);
+    }
+
+    [Fact]
+    public void CheckRangeCollision_DetectsCollisionAndDisjointCorrectly()
+    {
+        var rangesA = new List<(int Start, int End)> { (10, 20) };
+        var rangesOverlapping = new List<(int Start, int End)> { (15, 25) };
+        var rangesAdjacentWithinMargin = new List<(int Start, int End)> { (23, 30) };
+        var rangesDisjoint = new List<(int Start, int End)> { (35, 45) };
+
+        Assert.True(SvnCheckerHelper.CheckRangeCollision(rangesA, rangesOverlapping));
+        Assert.True(SvnCheckerHelper.CheckRangeCollision(rangesA, rangesAdjacentWithinMargin, margin: 3));
+        Assert.False(SvnCheckerHelper.CheckRangeCollision(rangesA, rangesDisjoint, margin: 3));
+    }
+
+    [Fact]
+    public void CheckRangeCollision_EmptyRanges_FallbacksToTrue()
+    {
+        var empty = new List<(int Start, int End)>();
+        var nonEmpty = new List<(int Start, int End)> { (10, 20) };
+
+        Assert.True(SvnCheckerHelper.CheckRangeCollision(empty, nonEmpty));
+        Assert.True(SvnCheckerHelper.CheckRangeCollision(empty, empty));
+    }
 }

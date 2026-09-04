@@ -109,10 +109,17 @@ Legenda priorità:
   - Aggiornato `Form1.GetStateVisual`, `StateCode` e `MergeStateLabel` per supportare i nuovi simboli e colori. Build e suite di test validati (37/37 verdi).
   - ? Completed and validated on 2026-08-29
 - [x] **Supporto GroupBy "Merge" in `Elenco Revisioni` e fix errore di compilazione CS0136**:
-  - In `ReportParserService.ParseRevisioniLines`, implementata la modalità `groupBy = "Merge"` con ordinamento crescente per numero di revisione, intestazione `"REVISIONI ORDINATE PER MERGE"` (ForeColor standard), esclusione delle revisioni con stato `Mergiato` e accorpamento duplicati con risoluzione priorità stati (`DaMergiareDiretta` > `DipendenzaSuccessivaMergiata` > `DipendenzaPrecedenteMergiata` > `DaMergiareIndirettaAlta` > `DaMergiareIndiretta` > `DipendenzaPrecedenteDaMergiare` > `DipendenzaSuccessivaDaMergiare`).
+  - In `ReportParserService.ParseRevisioniLines`, implementata la modalità `groupBy = "Merge"` con ordinamento crescente per numero di revisione, intestazione `"REVISIONI ORDINATE PER MERGE"` (ForeColor standard), esclusione delle revisioni con stato `Mergiato` e accorpamento duplicati con risoluzione priorità stati (`DaMergiareDiretta` = `DipendenzaUtentePrecedenteDaMergiare` > `DipendenzaSuccessivaMergiata` > `DipendenzaPrecedenteMergiata` > `DaMergiareIndirettaAlta` > `DaMergiareIndiretta` > `DipendenzaPrecedenteDaMergiare` > `DipendenzaSuccessivaDaMergiare`).
   - Risolto l'errore CS0136 centralizzando la dichiarazione della variabile locale `currentIssue` in testa a `ParseRevisioniLines`.
   - Aggiunti unit test dedicati (`ParseRevisioniLines_GroupByMerge_*`).
   - ? Completed and validated on 2026-08-29 (41/41 test verdi)
+- [x] **Rilevamento collisioni diff e rendering sdoppiato delle revisioni utente**:
+  - Rilevamento delle reali collisioni tra revisioni analizzando i range di righe degli hunk dei diff SVN (`ParseDiffHunkRanges` e `CheckRangeCollision` con margine di 3 righe).
+  - Introdotto `RevisionDisplayState.DipendenzaUtentePrecedenteDaMergiare` (`Color.LightGray` con simbolo `[?]`) e la proprietà `IsUserCollision` in `RevisionInfo`.
+  - Sdoppiamento nell'albero per Issue: le revisioni utente dirette vengono mostrate a livello 0 in blu (`DaMergiareDiretta`) e indentate come dipendenze in grigio chiaro (`DipendenzaUtentePrecedenteDaMergiare`), senza espandere sotto-dipendenze sotto il nodo grigio chiaro.
+  - Deduplicazione delle coppie `(revisione, stato)` nell'output 1 dell'albero per evitare righe ridondanti.
+  - Aggiunti unit test dedicati in `SvnCheckerHelperTests` e `ReportParserServiceTests` (suite completa a 51/51 test verdi).
+  - ? Completed and validated on 2026-08-29
 - ?? **Estrarre in un piccolo helper/ViewModel la costruzione di `SvnCheckerParameters`**
   (righe 208-234), oggi costruita inline nel click handler leggendo direttamente i controlli WinForms.
 

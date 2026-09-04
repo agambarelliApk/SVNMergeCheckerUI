@@ -33,7 +33,8 @@ namespace SVNMergeCheckerUI
         DipendenzaSuccessivaMergiata,
         DipendenzaSuccessivaDaMergiare,
         DipendenzaPrecedenteMergiata,
-        DipendenzaPrecedenteDaMergiare
+        DipendenzaPrecedenteDaMergiare,
+        DipendenzaUtentePrecedenteDaMergiare
     }
 
     // Direzione temporale di una dipendenza scoperta tramite la cronologia di un file,
@@ -52,6 +53,7 @@ namespace SVNMergeCheckerUI
         public string Author  { get; init; } = "Unknown";
         public string Message { get; init; } = string.Empty;
         public RevisionDisplayState DisplayState { get; set; } = RevisionDisplayState.DaMergiareDiretta;
+        public bool IsUserCollision { get; set; }
         public List<string> Files { get; } = new();
         public HashSet<string> MatchedIssues { get; } = new(StringComparer.OrdinalIgnoreCase);
         public RevisionInfo? ParentRev { get; set; }

@@ -483,6 +483,7 @@ namespace SVNMergeCheckerUI {
         private static (Color Color, string Symbol) GetStateVisual(RevisionDisplayState state) => state switch {
             RevisionDisplayState.Mergiato => (Color.Green, "[\u2714 ]"),
             RevisionDisplayState.DaMergiareDiretta => (Color.Blue, "[\u25B6]"),
+            RevisionDisplayState.DipendenzaUtentePrecedenteDaMergiare => (Color.LightGray, "[\u25B6]"),
             RevisionDisplayState.DaMergiareIndiretta => (Color.Orange, "[\u2757]"),
             RevisionDisplayState.DaMergiareIndirettaAlta => (Color.Red, "[\u2714]"),
             RevisionDisplayState.DipendenzaSuccessivaMergiata => (Color.Red, "[\u2714]"),

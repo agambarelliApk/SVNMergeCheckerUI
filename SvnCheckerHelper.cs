@@ -238,6 +238,7 @@ namespace SVNMergeCheckerUI {
                     if (!details.TryGetValue(rev, out var existing)) {
                         details[rev] = info;
                     } else {
+                        existing.IsUserCollision = existing.IsUserCollision || info.IsUserCollision;
                         foreach (var mi in info.MatchedIssues) existing.MatchedIssues.Add(mi);
                         existing.issues = string.Join(", ", existing.MatchedIssues);
 
@@ -385,6 +386,49 @@ namespace SVNMergeCheckerUI {
         // ----------------------------------------------------------------
         // Sezione 3: analisi ciclica dipendenze
         // ----------------------------------------------------------------
+        private static readonly Regex HunkHeaderRegex = new(
+            @"@@\s+-(?<oldStart>\d+)(?:,(?<oldCount>\d+))?\s+\+(?<newStart>\d+)(?:,(?<newCount>\d+))?\s+@@",
+            RegexOptions.Compiled);
+
+        public static List<(int Start, int End)> ParseDiffHunkRanges(string? diffText) {
+            var ranges = new List<(int Start, int End)>();
+            if (string.IsNullOrWhiteSpace(diffText)) return ranges;
+
+            foreach (var line in diffText.Split('\n')) {
+                var m = HunkHeaderRegex.Match(line);
+                if (!m.Success) continue;
+
+                var oldStart = int.Parse(m.Groups["oldStart"].Value);
+                var oldCount = m.Groups["oldCount"].Success ? int.Parse(m.Groups["oldCount"].Value) : 1;
+                var newStart = int.Parse(m.Groups["newStart"].Value);
+                var newCount = m.Groups["newCount"].Success ? int.Parse(m.Groups["newCount"].Value) : 1;
+
+                var start = Math.Min(oldStart, newStart);
+                var end = Math.Max(oldStart + Math.Max(0, oldCount - 1), newStart + Math.Max(0, newCount - 1));
+                ranges.Add((start, end));
+            }
+
+            return ranges;
+        }
+
+        public static bool CheckRangeCollision(
+            IReadOnlyList<(int Start, int End)> rangesA,
+            IReadOnlyList<(int Start, int End)> rangesB,
+            int margin = 3) {
+            // Se uno dei due non ha hunk parsabili (es. diff binario o modifica file-level), fallback conservativo su collisione
+            if (rangesA.Count == 0 || rangesB.Count == 0)
+                return true;
+
+            foreach (var (startA, endA) in rangesA) {
+                foreach (var (startB, endB) in rangesB) {
+                    if (startA <= endB + margin && startB <= endA + margin)
+                        return true;
+                }
+            }
+
+            return false;
+        }
+
         private async Task AnalyzeDependenciesAsync(
             List<int> toProcess,
             Dictionary<int, List<string>> tree,
@@ -396,8 +440,35 @@ namespace SVNMergeCheckerUI {
             IProgress<string> progress,
             CancellationToken ct,
             int timeoutMs) {
-            var diffSummaryRe = new Regex(@"^[ADMR]\s+(.+)$", RegexOptions.Compiled);
+            var directRevs = new HashSet<int>(toProcess);
+            var diffSummaryRe = new Regex(@"^[ADMR\s]{1,3}\s+(.+)$", RegexOptions.Compiled);
             progress.Report($"  [DEBUG] repoUrl usato per diff: '{repoUrl}'");
+
+            var diffRangeCache = new Dictionary<(int Rev, string FileUrl), List<(int Start, int End)>>();
+            var fileLogCache = new Dictionary<string, XmlDocument?>(StringComparer.OrdinalIgnoreCase);
+            var processedRevFiles = new HashSet<(int Rev, string File)>();
+
+            async Task<List<(int Start, int End)>> GetHunkRangesAsync(int targetRev, string fileUrl) {
+                var key = (targetRev, fileUrl);
+                if (diffRangeCache.TryGetValue(key, out var cached))
+                    return cached;
+
+                var diffText = await RunSvnRawAsync(
+                    new[] { "diff", "-c", targetRev.ToString(), fileUrl }, ct, timeoutMs);
+                var ranges = ParseDiffHunkRanges(diffText);
+                diffRangeCache[key] = ranges;
+                return ranges;
+            }
+
+            async Task<XmlDocument?> GetFileLogXmlAsync(string targetFileUrl) {
+                if (fileLogCache.TryGetValue(targetFileUrl, out var cachedDoc))
+                    return cachedDoc;
+
+                var doc = await RunSvnXmlAsync(
+                    new[] { "log", "--xml", "-r", "1:HEAD", targetFileUrl }, ct, timeoutMs);
+                fileLogCache[targetFileUrl] = doc;
+                return doc;
+            }
 
             for (var idx = 0; idx < toProcess.Count; idx++) {
                 ct.ThrowIfCancellationRequested();
@@ -427,32 +498,47 @@ namespace SVNMergeCheckerUI {
                 details[rev].Files.AddRange(filesInRev);
 
                 foreach (var file in filesInRev) {
-                    if (!processedFiles.Add(file)) continue;
+                    if (!processedRevFiles.Add((rev, file))) continue;
 
                     var fileUrl = file.StartsWith("http", StringComparison.OrdinalIgnoreCase)
                         ? file
-                        : $"{repoUrl.TrimEnd('/')}/{file.TrimStart('/')}";
+                        : $"{repoUrl.TrimEnd('/', '\\')}/{file.TrimStart('/', '\\')}";
 
-                    // Nessuna peg revision (@rev): recupera l'intera cronologia del file (precedente
-                    // e successiva alla revisione corrente), limitata inferiormente da searchMinDate.
-                    var fileLogXml = await RunSvnXmlAsync(
-                        new[] { "log", "--xml", "-r", "1:HEAD", fileUrl }, ct, timeoutMs);
+                    var fileLogXml = await GetFileLogXmlAsync(fileUrl);
                     if (fileLogXml is null) continue;
+
+                    var revHunkRanges = await GetHunkRangesAsync(rev, fileUrl);
 
                     var truncated = false;
                     foreach (XmlElement entry in fileLogXml.SelectNodes("/log/logentry")!) {
                         if (!int.TryParse(entry.GetAttribute("revision"), out var fRev)) continue;
-                        if (fRev == rev) continue;
+                        if (fRev >= rev) continue; // Solo revisioni precedenti
                         if (!DateTime.TryParse(entry.SelectSingleNode("date")?.InnerText, out var fDate)) fDate = DateTime.MinValue;
                         if (fDate < searchMinDate) continue;
-                        if (toProcess.Contains(fRev)) continue;
 
-                        var direction = fRev > rev ? DependencyDirection.Next : DependencyDirection.Previous;
+                        var fRevHunkRanges = await GetHunkRangesAsync(fRev, fileUrl);
+                        if (!CheckRangeCollision(revHunkRanges, fRevHunkRanges)) {
+                            progress.Report($"  [NESSUNA COLLISIONE] '{file}' rev {fRev} non collide con {rev} (righe disgiunte)");
+                            continue;
+                        }
 
                         var fAuth = entry.SelectSingleNode("author")?.InnerText.Trim() ?? "Unknown";
                         var fMsg = entry.SelectSingleNode("msg")?.InnerText.Trim() ?? string.Empty;
 
-                        progress.Report($"  [DIPENDENZA TROVATA] '{file}' richiede {fRev} (Autore: {fAuth}, direzione: {direction})");
+                        progress.Report($"  [COLLISIONE TROVATA] '{file}' richiede {fRev} (Autore: {fAuth}, direzione: Previous)");
+
+                        if (!tree.ContainsKey(fRev)) tree[fRev] = new List<string>();
+                        if (!tree.ContainsKey(rev)) tree[rev] = new List<string>();
+                        var depText = $"revisione precedente derivata da {rev} da file in {fRev}";
+                        if (!tree[rev].Contains(depText))
+                            tree[rev].Add(depText);
+
+                        if (directRevs.Contains(fRev) && details.TryGetValue(fRev, out var fRevInfo)) {
+                            fRevInfo.IsUserCollision = true;
+                        }
+
+                        if (toProcess.Contains(fRev))
+                            continue;
 
                         if (toProcess.Count >= maxRevs) {
                             if (!truncated) {
@@ -462,11 +548,7 @@ namespace SVNMergeCheckerUI {
                             continue;
                         }
 
-                        TryAddRevision(fRev, fDate, fAuth, fMsg, maxRevs, details, toProcess, parent: details[rev], direction: direction);
-                        if (!tree.ContainsKey(fRev)) tree[fRev] = new List<string>();
-                        if (!tree.ContainsKey(rev)) tree[rev] = new List<string>();
-                        var directionLabel = direction == DependencyDirection.Next ? "successiva" : "precedente";
-                        tree[rev].Add($"revisione {directionLabel} derivata da {rev} da file in {fRev}");
+                        TryAddRevision(fRev, fDate, fAuth, fMsg, maxRevs, details, toProcess, parent: details[rev], direction: DependencyDirection.Previous);
                     }
                 }
             }
@@ -599,7 +681,6 @@ namespace SVNMergeCheckerUI {
             sb.AppendLine("3. FILE COINVOLTI PER OGNI REVISIONE DA MERGIARE:");
 
             if (p.Issues.Count > 0) {
-                bool isFirtsIssue = true;
                 foreach (var issue in p.Issues) {
                     var hasDirect = issueToRevisions.ContainsKey(issue);
                     var hasOrphans = orphansByIssue.TryGetValue(issue, out var issueOrphans) && issueOrphans.Count > 0;
@@ -683,6 +764,7 @@ namespace SVNMergeCheckerUI {
         private static string MergeStateLabel(RevisionDisplayState state) => state switch {
             RevisionDisplayState.Mergiato => "[\u2714]",
             RevisionDisplayState.DaMergiareDiretta => "[\u25B6]",
+            RevisionDisplayState.DipendenzaUtentePrecedenteDaMergiare => "[\u25B6]",
             RevisionDisplayState.DaMergiareIndiretta => "[\u2757]",
             RevisionDisplayState.DaMergiareIndirettaAlta => "[\u274C]",
             RevisionDisplayState.DipendenzaSuccessivaMergiata => "[\u274C]",
@@ -695,6 +777,7 @@ namespace SVNMergeCheckerUI {
         private static string StateCode(RevisionDisplayState state) => state switch {
             RevisionDisplayState.Mergiato => "M",
             RevisionDisplayState.DaMergiareDiretta => "D",
+            RevisionDisplayState.DipendenzaUtentePrecedenteDaMergiare => "UD",
             RevisionDisplayState.DaMergiareIndiretta => "I",
             RevisionDisplayState.DaMergiareIndirettaAlta => "X",
             RevisionDisplayState.DipendenzaSuccessivaMergiata => "SM",

@@ -47,13 +47,14 @@ funzioni collegate, con particolare attenzione alla gestione multi-issue e alle 
 
 - `RevisionInfo.DisplayState` è lo stato globale usato come fallback.
 - `RevisionInfo.PerIssueDisplayStates[issue]` è lo stato corretto da usare nel contesto della issue.
+- `RevisionDisplayState.DipendenzaUtentePrecedenteDaMergiare` (grigio chiaro `[?]`) rappresenta la dipendenza di una revisione utente che collide con un'altra revisione utente.
 - `ReportParserService` e `RevisionRenderingService` devono sempre preferire lo stato per-issue quando disponibile.
 
 ## Sezioni report
 
 ### Sezione 1 - elenco revisioni
 
-- Modalità **GroupBy = "Issue"**: raggruppa le revisioni per issue, inserisce il separatore `--- Revisioni senza issue diretta ---` per le dipendenze della issue e usa `StateForIssue(...)` per evitare il collasso su uno stato unico.
+- Modalità **GroupBy = "Issue"**: raggruppa le revisioni per issue e le struttura ad albero; le revisioni utente dirette vengono mostrate come radici in blu (`DaMergiareDiretta`) e come sotto-dipendenze in grigio chiaro (`DipendenzaUtentePrecedenteDaMergiare`), senza espandere ulteriormente sotto-nodi dal nodo grigio chiaro. Le combinazioni duplicate `(revisione, stato)` vengono filtrate.
 - Modalità **GroupBy = "Merge"**: genera l'elenco deduplicato e ordinato in modo crescente di tutte le revisioni da mergiare con intestazione `REVISIONI ORDINATE PER MERGE`, esclude quelle già mergiate e risolve le collisioni secondo la gerarchia di priorità degli stati.
 
 ### Sezione 2 - albero dipendenze

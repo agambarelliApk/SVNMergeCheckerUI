@@ -143,6 +143,7 @@ namespace SVNMergeCheckerUI
         private static int GetMergeStatePriority(RevisionDisplayState? state) => state switch
         {
             RevisionDisplayState.DaMergiareDiretta => 1,
+            RevisionDisplayState.DipendenzaUtentePrecedenteDaMergiare => 1,
             RevisionDisplayState.DipendenzaSuccessivaMergiata => 2,
             RevisionDisplayState.DipendenzaPrecedenteMergiata => 3,
             RevisionDisplayState.DaMergiareIndirettaAlta => 4,
@@ -337,25 +338,48 @@ namespace SVNMergeCheckerUI
                         }
                     }
 
-                    var roots = revOrder.Where(r => !childToParent.ContainsKey(r)).ToList();
-                    var visited = new HashSet<int>();
+                    // Le revisioni dirette utente (DaMergiareDiretta / Mergiato) vengono sempre emesse
+                    // al livello 0, oltre a quelle che non hanno genitori nel blocco corrente
+                    var roots = revOrder.Where(r =>
+                        !childToParent.ContainsKey(r) ||
+                        revMap[r].state == RevisionDisplayState.DaMergiareDiretta ||
+                        revMap[r].state == RevisionDisplayState.Mergiato).ToList();
 
-                    void EmitTree(int nodeRev, int level)
+                    var allVisited = new HashSet<int>();
+                    var emittedRevStates = new HashSet<(int Rev, RevisionDisplayState? State)>();
+
+                    void EmitTree(int nodeRev, int level, bool isChildDependency, HashSet<int> branchVisited)
                     {
-                        if (!visited.Add(nodeRev)) return;
+                        if (!branchVisited.Add(nodeRev)) return;
                         if (!revMap.TryGetValue(nodeRev, out var nodeInfo)) return;
 
-                        var indent = new string(' ', 2 + level * 2);
-                        var formatted = $"{indent}=> {nodeInfo.cleanLine}";
-                        result.Add((formatted, nodeInfo.state));
+                        var displayState = nodeInfo.state;
+                        if (isChildDependency && (displayState == RevisionDisplayState.DaMergiareDiretta || displayState == RevisionDisplayState.DipendenzaUtentePrecedenteDaMergiare))
+                        {
+                            displayState = RevisionDisplayState.DipendenzaUtentePrecedenteDaMergiare;
+                        }
+
+                        if (emittedRevStates.Add((nodeRev, displayState)))
+                        {
+                            var indent = new string(' ', 2 + level * 2);
+                            var formatted = $"{indent}=> {nodeInfo.cleanLine}";
+                            result.Add((formatted, displayState));
+                        }
+
+                        allVisited.Add(nodeRev);
+
+                        // Per i nodi emessi come DipendenzaUtentePrecedenteDaMergiare (grigio chiaro),
+                        // non esploriamo le ulteriori dipendenti (già mostrate sotto il nodo radice diretto).
+                        if (displayState == RevisionDisplayState.DipendenzaUtentePrecedenteDaMergiare)
+                            return;
 
                         if (issueTree.TryGetValue(nodeRev, out var children))
                         {
                             foreach (var cRev in children)
                             {
-                                if (revMap.ContainsKey(cRev) && !visited.Contains(cRev))
+                                if (revMap.ContainsKey(cRev) && cRev != nodeRev && !branchVisited.Contains(cRev))
                                 {
-                                    EmitTree(cRev, level + 1);
+                                    EmitTree(cRev, level + 1, isChildDependency: true, new HashSet<int>(branchVisited));
                                 }
                             }
                         }
@@ -363,14 +387,14 @@ namespace SVNMergeCheckerUI
 
                     foreach (var root in roots)
                     {
-                        EmitTree(root, 0);
+                        EmitTree(root, 0, isChildDependency: false, new HashSet<int>());
                     }
 
                     foreach (var rev in revOrder)
                     {
-                        if (!visited.Contains(rev))
+                        if (!allVisited.Contains(rev))
                         {
-                            EmitTree(rev, 0);
+                            EmitTree(rev, 0, isChildDependency: false, new HashSet<int>());
                         }
                     }
                 }
