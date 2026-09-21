@@ -284,7 +284,7 @@ while ($index -lt $RevisioniDaElaborare.Count) {
 
         $FileFullUrlWithPeg = "${FileFullUrl}@$rev"
 
-        $RawLog = Invoke-Svn @('log', '--xml', $FileFullUrlWithPeg)
+        $RawLog = Invoke-Svn @('log', '--stop-on-copy', '--xml', $FileFullUrlWithPeg)
         if ([string]::IsNullOrWhiteSpace($RawLog)) { 
             Write-Host "  [INFO] Impossibile recuperare il log per '$file' (File rimosso o spostato)." -ForegroundColor Gray
             continue 

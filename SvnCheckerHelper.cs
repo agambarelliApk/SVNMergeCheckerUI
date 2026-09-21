@@ -465,7 +465,7 @@ namespace SVNMergeCheckerUI {
                     return cachedDoc;
 
                 var doc = await RunSvnXmlAsync(
-                    new[] { "log", "--xml", "-r", "1:HEAD", targetFileUrl }, ct, timeoutMs);
+                    new[] { "log", "--xml", "--stop-on-copy", "-r", "1:HEAD", targetFileUrl }, ct, timeoutMs);
                 fileLogCache[targetFileUrl] = doc;
                 return doc;
             }
