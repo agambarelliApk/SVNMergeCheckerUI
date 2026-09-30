@@ -31,6 +31,8 @@
             lblSourceRepo = new Label();
             txtSourceRepo = new TextBox();
             btnBrowseSourceRepo = new Button();
+            lblIncludi = new Label();
+            cmbIncludi = new ComboBox();
             btnSvnConnect = new Button();
             btnSvnUpdate = new Button();
             grpConfig = new GroupBox();
@@ -85,6 +87,8 @@
             grpDirectory.Controls.Add(lblSourceRepo);
             grpDirectory.Controls.Add(txtSourceRepo);
             grpDirectory.Controls.Add(btnBrowseSourceRepo);
+            grpDirectory.Controls.Add(lblIncludi);
+            grpDirectory.Controls.Add(cmbIncludi);
             grpDirectory.Controls.Add(btnSvnConnect);
             grpDirectory.Controls.Add(btnSvnUpdate);
             grpDirectory.Location = new Point(8, 8);
@@ -146,21 +150,38 @@
             btnBrowseSourceRepo.Text = "...";
             btnBrowseSourceRepo.Click += btnBrowseSourceRepo_Click;
             // 
+            // lblIncludi
+            // 
+            lblIncludi.Location = new Point(8, 90);
+            lblIncludi.Name = "lblIncludi";
+            lblIncludi.Size = new Size(60, 28);
+            lblIncludi.TabIndex = 6;
+            lblIncludi.Text = "Includi:";
+            lblIncludi.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
+            // 
+            // cmbIncludi
+            // 
+            cmbIncludi.DropDownStyle = ComboBoxStyle.DropDownList;
+            cmbIncludi.Location = new Point(70, 90);
+            cmbIncludi.Name = "cmbIncludi";
+            cmbIncludi.Size = new Size(110, 27);
+            cmbIncludi.TabIndex = 7;
+            // 
             // btnSvnConnect
             // 
-            btnSvnConnect.Location = new Point(112, 90);
+            btnSvnConnect.Location = new Point(190, 90);
             btnSvnConnect.Name = "btnSvnConnect";
             btnSvnConnect.Size = new Size(130, 28);
-            btnSvnConnect.TabIndex = 6;
+            btnSvnConnect.TabIndex = 8;
             btnSvnConnect.Text = "SVN Connect";
             btnSvnConnect.Click += btnSvnConnect_Click;
             // 
             // btnSvnUpdate
             // 
-            btnSvnUpdate.Location = new Point(250, 90);
+            btnSvnUpdate.Location = new Point(328, 90);
             btnSvnUpdate.Name = "btnSvnUpdate";
             btnSvnUpdate.Size = new Size(130, 28);
-            btnSvnUpdate.TabIndex = 7;
+            btnSvnUpdate.TabIndex = 9;
             btnSvnUpdate.Text = "SVN Update";
             btnSvnUpdate.Click += btnSvnUpdate_Click;
             // 
@@ -523,6 +544,8 @@
         private Label lblSourceRepo;
         private TextBox txtSourceRepo;
         private Button btnBrowseSourceRepo;
+        private Label lblIncludi;
+        private ComboBox cmbIncludi;
         private Button btnSvnConnect;
         private Button btnSvnUpdate;
 

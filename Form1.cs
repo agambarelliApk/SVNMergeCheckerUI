@@ -29,6 +29,9 @@ namespace SVNMergeCheckerUI {
             ApplyModeToResultType();
             UpdateGroupByOptions();
 
+            cmbIncludi.Items.AddRange(new object[] { "", "TributiNet", "Generale", "Tutto" });
+            cmbIncludi.SelectedIndex = 0;
+
             txtOutFile.Text = @"C:\APSNet\Tempdir\report_svn_checker.txt";
 
             UpdateWindowTitle(string.Empty);
@@ -324,7 +327,8 @@ namespace SVNMergeCheckerUI {
                 SkipRevisions: skipSet,
                 MaxNewRevs: (int)numMaxNewRevs.Value,
                 OutFile: txtOutFile.Text.Trim(),
-                SvnTimeoutSeconds: (int)numSvnTimeout.Value
+                SvnTimeoutSeconds: (int)numSvnTimeout.Value,
+                Includi: cmbIncludi.SelectedItem?.ToString() ?? ""
             );
 
             try {
@@ -436,7 +440,8 @@ namespace SVNMergeCheckerUI {
             MaxNewRevs = (int)numMaxNewRevs.Value,
             OutFile = txtOutFile.Text.Trim(),
             ResultType = cmbResultType.SelectedItem?.ToString() ?? "Elenco Revisioni",
-            SvnTimeoutSeconds = (int)numSvnTimeout.Value
+            SvnTimeoutSeconds = (int)numSvnTimeout.Value,
+            Includi = cmbIncludi.SelectedItem?.ToString() ?? ""
         };
 
         private void ApplyConfig(AppConfig cfg) {
@@ -451,6 +456,8 @@ namespace SVNMergeCheckerUI {
             txtOutFile.Text = cfg.OutFile;
             var idx = cmbResultType.Items.IndexOf(cfg.ResultType);
             cmbResultType.SelectedIndex = idx >= 0 ? idx : 0;
+            var includiIdx = cmbIncludi.Items.IndexOf(cfg.Includi ?? "");
+            cmbIncludi.SelectedIndex = includiIdx >= 0 ? includiIdx : 0;
         }
 
         private void RenderOutput(string resultType) {

@@ -233,6 +233,41 @@ public class ReportParserServiceTests
     }
 
     // ---------------------------------------------------------------
+    // ParseRevisioniLines: sezioni di variante SVN (TributiNet/Generale)
+    // ---------------------------------------------------------------
+
+    [Fact]
+    public void ParseRevisioniLines_VariantSections_NoBlankLineAfterIssueHeader_AndProperSpacingAroundVariants()
+    {
+        // Formato reale prodotto da SvnCheckerHelper.BuildReportText + AppendVariantSections.
+        var section =
+            "=== [apkhttri-435] ===\n" +
+            "  > 293281 del 18/08/2026 08:28 [alessio.gambarelli] : msg diretta\n" +
+            "\n" +
+            "  ***** TributiNet *****\n" +
+            "    => 293280 del 18/08/2026 08:25 [alessio.gambarelli] : msg tributinet\n";
+
+        var states = new Dictionary<int, RevisionDisplayState>
+        {
+            [293281] = RevisionDisplayState.DaMergiareDiretta,
+            [293280] = RevisionDisplayState.DaMergiareDiretta
+        };
+
+        var result = _sut.ParseRevisioniLines(section, states);
+
+        // Attese: header issue, subito la revisione diretta (nessuna riga vuota in mezzo),
+        // poi UNA riga vuota, header variante (indentato a 2 spazi), revisione variante
+        // (indentata a 4 spazi), e riga vuota finale.
+        Assert.Equal(6, result.Count);
+        Assert.Equal(("=== [apkhttri-435] ===", (RevisionDisplayState?)null), result[0]);
+        Assert.Equal(("  => 293281 del 18/08/2026 08:28 [alessio.gambarelli] : msg diretta", (RevisionDisplayState?)RevisionDisplayState.DaMergiareDiretta), result[1]);
+        Assert.Equal((string.Empty, (RevisionDisplayState?)null), result[2]);
+        Assert.Equal(("  ***** TributiNet *****", (RevisionDisplayState?)null), result[3]);
+        Assert.Equal(("    => 293280 del 18/08/2026 08:25 [alessio.gambarelli] : msg tributinet", (RevisionDisplayState?)RevisionDisplayState.DaMergiareDiretta), result[4]);
+        Assert.Equal((string.Empty, (RevisionDisplayState?)null), result[5]);
+    }
+
+    // ---------------------------------------------------------------
     // PivotFileCoinvolti
     // ---------------------------------------------------------------
 

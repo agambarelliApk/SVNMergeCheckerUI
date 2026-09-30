@@ -12,7 +12,10 @@ namespace SVNMergeCheckerUI
         // Numero di giorni prima della revisione più antica inserita dall'utente da considerare
         // come finestra minima di ricerca della cronologia dei file (precedente/successiva).
         // 0 = nessun limite inferiore (usa DateTime.MinValue).
-        int SearchMinDateDays = 60
+        int SearchMinDateDays = 60,
+        // Livello di verifica SVN parallela aggiuntiva: "", "TributiNet", "Generale" o "Tutto".
+        // Vedi SvnCheckerHelper.ResolveVariantUrl per la logica di trasformazione dell'URL sorgente.
+        string Includi = ""
     );
 
     // Stati di visualizzazione:

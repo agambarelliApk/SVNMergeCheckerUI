@@ -15,6 +15,7 @@ namespace SVNMergeCheckerUI
         public string OutFile { get; set; } = string.Empty;
         public string ResultType { get; set; } = "Script output";
         public int SvnTimeoutSeconds { get; set; } = 60;
+        public string Includi { get; set; } = "";
     }
 
     public interface IConfigService

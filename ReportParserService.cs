@@ -256,8 +256,42 @@ namespace SVNMergeCheckerUI
                 issueBlocks.Add((currentBlockIssue, currentLines));
             }
 
-            foreach (var (issueKey, blockLines) in issueBlocks)
+            foreach (var (issueKey, rawBlockLines) in issueBlocks)
             {
+                // Le sezioni di verifica parallela SVN (TributiNet/Generale, vedi
+                // SvnCheckerHelper.AppendVariantSections) sono accodate in coda al blocco
+                // dell'issue, a partire dalla riga header "********** TributiNet *********" /
+                // "********** Generale *********". Vanno isolate PRIMA di elaborare le
+                // revisioni "standard" del blocco, altrimenti finiscono mescolate/riordinate
+                // insieme all'albero delle dipendenze (le righe non-revisione venivano tutte
+                // spostate in cima al blocco, vedi bug segnalato).
+                var variantHeaderIdx = rawBlockLines.FindIndex(l =>
+                {
+                    var t = l.Trim();
+                    return t.StartsWith("*****") && (t.Contains("TributiNet") || t.Contains("Generale"));
+                });
+
+                List<string> blockLines;
+                List<string> variantTailLines;
+                if (variantHeaderIdx >= 0)
+                {
+                    blockLines = rawBlockLines.Take(variantHeaderIdx).ToList();
+                    variantTailLines = rawBlockLines.Skip(variantHeaderIdx).ToList();
+
+                    // Rimuove le righe vuote di chiusura del blocco "standard" (es. la riga vuota
+                    // che SvnCheckerHelper.AppendVariantSections inserisce prima dell'header di
+                    // variante): la spaziatura verso le sezioni di variante viene reinserita in modo
+                    // esplicito e controllato più sotto, per evitare che finisca nella posizione
+                    // sbagliata (subito dopo "=== [issue] ===" invece che dopo l'ultima revisione).
+                    while (blockLines.Count > 0 && blockLines[^1].Trim().Length == 0)
+                        blockLines.RemoveAt(blockLines.Count - 1);
+                }
+                else
+                {
+                    blockLines = rawBlockLines;
+                    variantTailLines = new List<string>();
+                }
+
                 var revMap = new Dictionary<int, (string cleanLine, RevisionDisplayState? state)>();
                 var revOrder = new List<int>();
                 var nonRevLines = new List<string>();
@@ -313,14 +347,14 @@ namespace SVNMergeCheckerUI
                     }
                 }
 
-                if (hadRevisionsInBlock && revMap.Count == 0 && issueKey != null) continue;
+                if (hadRevisionsInBlock && revMap.Count == 0 && issueKey != null && variantTailLines.Count == 0) continue;
 
                 foreach (var nrl in nonRevLines)
                 {
                     result.Add((nrl.Replace("    ", "  "), null));
                 }
 
-                if (revMap.Count == 0) continue;
+                if (revMap.Count == 0 && variantTailLines.Count == 0) continue;
 
                 if (issueTree != null)
                 {
@@ -406,6 +440,56 @@ namespace SVNMergeCheckerUI
                         var nodeInfo = revMap[rev];
                         result.Add(($"  => {nodeInfo.cleanLine}", nodeInfo.state));
                     }
+                }
+
+                // Sezioni di verifica parallela SVN (TributiNet/Generale): renderizzate in coda al
+                // blocco dell'issue. La spaziatura viene gestita esplicitamente qui (una riga vuota
+                // prima di ciascun header di variante e una riga vuota finale dopo l'ultima), invece
+                // di affidarsi alle righe vuote originali del testo (che finirebbero nella posizione
+                // sbagliata, vedi bug segnalato). Le revisioni delle varianti non fanno parte
+                // dell'albero delle dipendenze dell'issue (provengono da un URL diverso), quindi
+                // vengono trattate come righe piatte.
+                if (variantTailLines.Count > 0)
+                {
+                    foreach (var line in variantTailLines)
+                    {
+                        var trimmed = line.Trim();
+                        if (trimmed.Length == 0)
+                            continue;
+
+                        var isVariantHeader = trimmed.StartsWith("*****");
+                        if (isVariantHeader)
+                        {
+                            result.Add((string.Empty, null));
+                            result.Add(("  " + trimmed, null));
+                            continue;
+                        }
+
+                        var match = RevisionPattern.Match(line);
+                        if (match.Success && int.TryParse(match.Groups["rev"].Value, out var rev))
+                        {
+                            RevisionDisplayState? state = null;
+                            if (issueKey != null && perIssueRevisionStates != null &&
+                                perIssueRevisionStates.TryGetValue(issueKey, out var issueStates) &&
+                                issueStates.TryGetValue(rev, out var perIssueState))
+                            {
+                                state = perIssueState;
+                            }
+                            else if (revisionStates.TryGetValue(rev, out var globalState))
+                            {
+                                state = globalState;
+                            }
+
+                            var clean = Regex.Replace(trimmed, @"^(?:=>|==|>)\s*", "");
+                            result.Add(($"    => {clean}", state));
+                        }
+                        else
+                        {
+                            result.Add(("    " + trimmed, null));
+                        }
+                    }
+
+                    result.Add((string.Empty, null));
                 }
             }
 
