@@ -135,7 +135,11 @@ namespace SVNMergeCheckerUI {
             foreach (var label in variantLabels) {
                 ct.ThrowIfCancellationRequested();
                 var folderName = VariantFolderNames[label];
-                var variantUrl = ResolveVariantUrl(repoUrl, folderName) ?? repoUrl;
+                var variantUrl = ResolveVariantUrl(repoUrl, folderName);
+                if (variantUrl is null) {
+                    progress.Report($"\n[-] Verifica parallela '{label}' saltata: la sorgente punta già a questa variante.");
+                    continue;
+                }
 
                 progress.Report($"\n[-] Verifica parallela '{label}' su: {variantUrl}");
                 var byIssue = await BuildVariantIssueRevisionsAsync(

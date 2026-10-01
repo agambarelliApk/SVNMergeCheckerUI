@@ -130,4 +130,18 @@ public class SvnCheckerHelperTests
         Assert.True(SvnCheckerHelper.CheckRangeCollision(empty, nonEmpty));
         Assert.True(SvnCheckerHelper.CheckRangeCollision(empty, empty));
     }
+
+    [Theory]
+    [InlineData("https://svn.example.com/repo/branches/feature1", "tributinet", "https://svn.example.com/repo/branches/tributinet")]
+    [InlineData("https://svn.example.com/repo/branches/feature1/", "generale", "https://svn.example.com/repo/branches/generale")]
+    [InlineData("https://svn.example.com/repo/branches/tributinet", "tributinet", null)]
+    [InlineData("https://svn.example.com/repo/branches/TributiNet/", "tributinet", null)]
+    [InlineData("https://svn.example.com/repo/branches/generale", "generale", null)]
+    [InlineData("https://svn.example.com/repo/branches/Generale/", "generale", null)]
+    [InlineData("noslash", "tributinet", null)]
+    public void ResolveVariantUrl_ReturnsExpectedUrlOrNull(string baseUrl, string variantFolderName, string? expected)
+    {
+        var result = SvnCheckerHelper.ResolveVariantUrl(baseUrl, variantFolderName);
+        Assert.Equal(expected, result);
+    }
 }

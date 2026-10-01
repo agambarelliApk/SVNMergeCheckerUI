@@ -52,7 +52,7 @@ main app plus the `SVNMergeCheckerUI.Tests` test project.
 
 ## Build/test
 - Build: `dotnet build SVNMergeCheckerUI.csproj` (or open `SVNMergeCheckerUI.sln` in Visual Studio).
-- No automated test project exists — do not assume test infrastructure.
+- Automated tests: `dotnet test` (progetto `SVNMergeCheckerUI.Tests`, 53 test unitari e golden-file).
 
 ## Constraints for future changes
 - Windows-only WinForms app (`net8.0-windows7.0`); do not introduce cross-platform UI assumptions.

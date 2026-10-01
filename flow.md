@@ -8,7 +8,7 @@ funzioni collegate, con particolare attenzione alla gestione multi-issue e alle 
 ## Flusso principale
 
 1. `Form1.btnRun_Click`
-   - Legge i parametri dalla UI.
+   - Legge i parametri dalla UI (inclusi `SvnTimeoutSeconds` e opzione `Includi`).
    - Costruisce `SvnCheckerParameters`.
    - Invoca `SvnCheckerHelper.RunAsync(...)`.
 
@@ -21,8 +21,10 @@ funzioni collegate, con particolare attenzione alla gestione multi-issue e alle 
    - Se non sono presenti issue:
      - carica le revisioni manuali;
      - esegue `AnalyzeDependenciesAsync` in modalità singola.
+   - Se è specificato il parametro `p.Includi` ("TributiNet", "Generale", "Tutto"):
+     - esegue la verifica parallela sui rami/varianti collegati (`BuildVariantSectionsAsync`) risolvendo gli URL con `ResolveVariantUrl` e controllando lo stato di merge (`GetMergedRevisionsAsync`).
    - Calcola gli stati di visualizzazione globali e per-issue.
-   - Costruisce il testo del report con `BuildReportText`.
+   - Costruisce il testo del report con `BuildReportText` (includendo le sezioni di variante in coda alla Sezione 1).
    - Restituisce `SvnCheckerResult` a `Form1`.
 
 ## Flusso per-issue
@@ -32,7 +34,9 @@ funzioni collegate, con particolare attenzione alla gestione multi-issue e alle 
 - Filtra le revisioni trovate nel log XML per la issue corrente.
 - Popola `MatchedIssues`.
 - Costruisce la `DependencyTree` della singola elaborazione.
-- Esegue `AnalyzeDependenciesAsync` sui file delle revisioni trovate.
+- Esegue `AnalyzeDependenciesAsync` sui file delle revisioni trovate:
+  - Ispezione cronologia file tramite `svn log --stop-on-copy --xml -r 1:HEAD <url>` (l'opzione `--stop-on-copy` impedisce di risalire la cronologia dei branch antenati tra candidate e release).
+  - Rilevamento collisioni reali tramite analisi dei range di righe degli hunk dei diff SVN (`ParseDiffHunkRanges` e `CheckRangeCollision` con margine di 3 righe).
 - Registra `PerIssueRoles[issue]` per ogni revisione scoperta.
 
 ### `MergeIssueResults`
@@ -55,7 +59,7 @@ funzioni collegate, con particolare attenzione alla gestione multi-issue e alle 
 
 ### Sezione 1 - elenco revisioni
 
-- Modalità **GroupBy = "Issue"**: raggruppa le revisioni per issue e le struttura ad albero; le revisioni utente dirette vengono mostrate come radici in blu (`DaMergiareDiretta`) e come sotto-dipendenze in grigio chiaro (`DipendenzaUtentePrecedenteDaMergiare`), senza espandere ulteriormente sotto-nodi dal nodo grigio chiaro. Le combinazioni duplicate `(revisione, stato)` vengono filtrate.
+- Modalità **GroupBy = "Issue"**: raggruppa le revisioni per issue e le struttura ad albero; le revisioni utente dirette vengono mostrate come radici in blu (`DaMergiareDiretta`) e come sotto-dipendenze in grigio chiaro (`DipendenzaUtentePrecedenteDaMergiare`), senza espandere ulteriormente sotto-nodi dal nodo grigio chiaro. Le combinazioni duplicate `(revisione, stato)` vengono filtrate. Se richiesta una verifica parallela (`Includi`), in coda al blocco di ciascuna issue vengono appese le sezioni di variante `***** TributiNet *****` e `***** Generale *****`.
 - Modalità **GroupBy = "Merge"**: genera l'elenco deduplicato e ordinato in modo crescente di tutte le revisioni da mergiare con intestazione `REVISIONI ORDINATE PER MERGE`, esclude quelle già mergiate e risolve le collisioni secondo la gerarchia di priorità degli stati.
 
 ### Sezione 2 - albero dipendenze

@@ -120,6 +120,26 @@ Legenda priorità:
   - Deduplicazione delle coppie `(revisione, stato)` nell'output 1 dell'albero per evitare righe ridondanti.
   - Aggiunti unit test dedicati in `SvnCheckerHelperTests` e `ReportParserServiceTests` (suite completa a 51/51 test verdi).
   - ? Completed and validated on 2026-08-29
+- [x] **Distinzione visiva dipendenze cross-issue da mergiare (`DipendenzaDirettaAltraIssuePrecedenteDaMergiare`)**:
+  - Introdotto lo stato `RevisionDisplayState.DipendenzaDirettaAltraIssuePrecedenteDaMergiare` (blu con simbolo `[??]`) per le dipendenze temporali precedenti da mergiare che sono contemporaneamente revisioni dirette per un'altra issue coinvolta nell'elaborazione.
+  - Riservato lo stato marrone `DipendenzaPrecedenteDaMergiare` unicamente alle dipendenze precedenti appartenenti a issue terze non incluse nell'elaborazione.
+  - Aggiornato `Form1.GetStateVisual`, `ReportParserService` e suite di test (52/52 test verdi).
+  - ? Completed and validated on 2026-09-04
+- [x] **Aggiunta icona dell'applicazione**:
+  - Aggiunta icona `.icon/Graphicloads-Polygon-Check.ico` configurata in `SVNMergeCheckerUI.csproj` (`ApplicationIcon`) e caricata nel form principale `Form1.resx`.
+  - ? Completed and validated on 2026-09-04
+- [x] **Isolamento cronologia rami con `--stop-on-copy`**:
+  - Aggiunto il parametro `--stop-on-copy` alle chiamate `svn log` per i singoli file in `SvnCheckerHelper.cs` (e allineato in `script/svn_predictive_merge_checker.ps1`).
+  - Previene il recupero delle revisioni del branch di origine/antenato quando si analizzano file tra rami candidate e release.
+  - ? Completed and validated on 2026-09-21
+- [x] **Controllo parallelo su rami/varianti collegati (TributiNet e Generale)**:
+  - Esteso `SvnCheckerParameters` e `AppConfig` con il parametro `Includi` (valori: `""`, `"TributiNet"`, `"Generale"`, `"Tutto"`).
+  - Aggiunto controllo `ComboBox cmbIncludi` in `Form1` con binding e persistenza nel profilo JSON (`svn_config.json`).
+  - In `SvnCheckerHelper`, implementata la risoluzione dinamica degli URL correlati (`ResolveVariantUrl`), l'interrogazione SVN log delle varianti (`BuildVariantSectionsAsync`) e il confronto dello stato di merge con la working copy.
+  - Generazione sezioni varianti dedicate in coda alla Sezione 1 del report (`***** TributiNet *****` e `***** Generale *****`).
+  - Aggiornato `ReportParserService.ParseRevisioniLines` per gestire le sezioni di coda delle varianti e la corretta formattazione/colorazione delle righe.
+  - Aggiunto test `ParseRevisioniLines_WithVariantSections_RendersVariantHeadersAndRevisionsCorrectly` in `ReportParserServiceTests` (suite completa a 53/53 test verdi).
+  - ? Completed and validated on 2026-09-30
 - ?? **Estrarre in un piccolo helper/ViewModel la costruzione di `SvnCheckerParameters`**
   (righe 208-234), oggi costruita inline nel click handler leggendo direttamente i controlli WinForms.
 
@@ -211,4 +231,4 @@ Legenda priorità:
   ricollegare, prima di investire ulteriore effort di refactoring su `SvnService`/`SvnCheckerHelper`.
 - Fix recente validato: nelle esecuzioni multi-issue le revisioni condivise non vengono più collassate
   su uno stato unico e le revisioni senza issue diretta non spariscono più dall'output; il flusso ora
-  conserva sia la vista globale sia quella per-issue. Build e test validati (38/38 verdi).
+  conserva sia la vista globale sia quella per-issue. Build e suite di test validati (53/53 verdi).

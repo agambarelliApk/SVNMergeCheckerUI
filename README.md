@@ -32,6 +32,9 @@ uno strumento visuale per prevenire merge incompleti o inconsistenti prima di es
 
 - Ricerca delle revisioni SVN per **codice Issue** oppure per **inserimento manuale** dei numeri di revisione.
 - Analisi ciclica delle **dipendenze tra revisioni** basata sui file effettivamente modificati, estesa sia alle revisioni **precedenti** che a quelle **successive** nella cronologia SVN.
+- Controllo capillare delle **collisioni di codice** analizzando i range di righe degli hunk nei diff SVN (`svn diff`) con margine di tolleranza di 3 righe, per rilevare reali sovrapposizioni tra modifiche.
+- Ispezione dello storico con opzione `--stop-on-copy` nelle interrogazioni `svn log` per non trascinare le revisioni dei branch antenati durante l'analisi tra rami candidate e release.
+- Verifica parallela opzionale (**Includi**) su varianti/rami collegati (*TributiNet*, *Generale*, *Tutto*) per verificare lo stato di merge delle issue anche sui repository correlati.
 - Rilevamento automatico delle revisioni **già mergiate** tramite `svn mergeinfo`.
 - Classificazione visiva dettagliata tramite simboli e colori:
   - 🟢 **Verde (`[✔ ]` / `[✔]`)** — `Mergiato` (revisione già mergiata) oppure `DipendenzaPrecedenteMergiata` (dipendenza precedente già mergiata).
@@ -113,10 +116,12 @@ Flusso tipico di utilizzo dalla UI:
 - **File di output:** il percorso del report testuale esportabile è configurabile dalla UI (campo *Out File*).
 - **Limite massimo revisioni:** il numero massimo di nuove revisioni analizzabili in un singolo ciclo è
   configurabile tramite l'apposito controllo numerico nell'interfaccia.
+- **Timeout SVN:** configurabile dall'utente (5-600 secondi, default 60s) tramite controllo numerico dedicato, persistito nel profilo e applicato con kill automatico del processo in caso di scadenza.
+- **Verifiche parallele (Includi):** configurabile tramite combobox (*Nessuno*, *TributiNet*, *Generale*, *Tutto*) per interrogare in parallelo i rami correlati preservando l'isolamento della working copy locale.
 
 ## Esecuzione dei test
 
-La solution include un progetto di test dedicato: `SVNMergeCheckerUI.Tests`.
+La solution include un progetto di test dedicato: `SVNMergeCheckerUI.Tests` (53 test automatici xUnit, tutti verdi).
 
 Per eseguire i test automatici:
 
@@ -124,8 +129,12 @@ Per eseguire i test automatici:
 dotnet test SVNMergeCheckerUI.Tests/SVNMergeCheckerUI.Tests.csproj
 ```
 
-Il progetto di test copre attualmente il parsing dei report tramite `ReportParserServiceTests`.
-Per validare le modifiche al comportamento complessivo dell'applicazione, resta utile affiancare anche una verifica manuale tramite l'interfaccia grafica su un repository SVN di prova.
+La suite copre:
+- Parsing e pivoting dei report (`ReportParserServiceTests`)
+- Golden-file test di non-regressione formato output (`ReportParserServiceGoldenFileTests`)
+- Algoritmi di collisione hunk e orchestrazione (`SvnCheckerHelperTests`)
+- Persistenza e validazione profili JSON (`JsonConfigServiceTests`)
+- Validazione argomenti e percorsi SVN (`SvnServiceTests`)
 
 ## Documentazione test
 
