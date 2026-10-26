@@ -6,7 +6,8 @@ namespace SVNMergeCheckerUI {
         private readonly IConfigService _configService;
         private readonly IReportParserService _reportParser;
         private readonly IRevisionRenderingService _revisionRenderingService;
-        private readonly SvnCheckerHelper _svnCheckerHelper;
+        private readonly IVariantConfigService _variantConfigService;
+        private SvnCheckerHelper _svnCheckerHelper;
 
         private string _fullReportOutput = string.Empty;
         private CancellationTokenSource? _cts;
@@ -20,7 +21,9 @@ namespace SVNMergeCheckerUI {
             _configService = new JsonConfigService();
             _reportParser = new ReportParserService();
             _revisionRenderingService = new RevisionRenderingService(_reportParser);
-            _svnCheckerHelper = new SvnCheckerHelper(_svnService);
+            _variantConfigService = new JsonVariantConfigService();
+            var variants = _variantConfigService.LoadAll();
+            _svnCheckerHelper = new SvnCheckerHelper(_svnService, variants);
 
             // Mode selector for ResultType (Standard/Debug)
             cmbMode.Items.AddRange(new object[] { "Standard", "Debug" });
@@ -29,12 +32,39 @@ namespace SVNMergeCheckerUI {
             ApplyModeToResultType();
             UpdateGroupByOptions();
 
-            cmbIncludi.Items.AddRange(new object[] { "", "TributiNet", "Generale", "Tutto" });
+            FillIncludiCombo(variants);
             cmbIncludi.SelectedIndex = 0;
 
             txtOutFile.Text = @"C:\APSNet\Tempdir\report_svn_checker.txt";
 
             UpdateWindowTitle(string.Empty);
+        }
+
+        // ----------------------------------------------------------------
+        // Moduli paralleli (combo Includi)
+        // ----------------------------------------------------------------
+        private void FillIncludiCombo(IReadOnlyList<VariantDefinition> variants) {
+            cmbIncludi.Items.Clear();
+            cmbIncludi.Items.Add("");
+            foreach (var v in variants) cmbIncludi.Items.Add(v.Label);
+            if (variants.Count > 1) cmbIncludi.Items.Add(JsonVariantConfigService.TuttoLabel);
+        }
+
+        private void btnConfigVariants_Click(object? sender, EventArgs e) {
+            try {
+                using var dlg = new VariantConfigDialog(_svnService, _variantConfigService.LoadAll());
+                if (dlg.ShowDialog(this) != DialogResult.OK) return;
+
+                _variantConfigService.Save(dlg.Variants);
+                var variants = _variantConfigService.LoadAll();
+                var previous = cmbIncludi.SelectedItem?.ToString() ?? "";
+                FillIncludiCombo(variants);
+                var idx = cmbIncludi.Items.IndexOf(previous);
+                cmbIncludi.SelectedIndex = idx >= 0 ? idx : 0;
+                _svnCheckerHelper = new SvnCheckerHelper(_svnService, variants);
+            } catch (Exception ex) {
+                MessageBox.Show(this, ex.Message, "Errore", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
         }
 
         // ----------------------------------------------------------------
@@ -395,6 +425,7 @@ namespace SVNMergeCheckerUI {
             btnSvnUpdate.Enabled = enabled;
             btnLoadConfig.Enabled = enabled;
             btnSvnConnect.Enabled = enabled;
+            btnConfigVariants.Enabled = enabled;
         }
 
         private void btnCancel_Click(object? sender, EventArgs e) {

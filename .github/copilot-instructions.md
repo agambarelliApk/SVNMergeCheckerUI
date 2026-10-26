@@ -11,12 +11,13 @@ main app plus the `SVNMergeCheckerUI.Tests` test project.
 - `PowerShellRunnerService.cs` — `IPowerShellRunnerService`, runs the checker script.
 - `SvnCheckerHelper.cs` — orchestration (issue lookup, dependency analysis, merge detection, report building); consumes `ISvnService`.
 - `SvnCheckerModels.cs` — `SvnCheckerParameters`/`RevisionInfo`/`SvnCheckerResult`.
+- `VariantConfig.cs` / `VariantConfigDialog.cs` — `IVariantConfigService`/`JsonVariantConfigService` (voci della combo `cmbIncludi` da `parallel_modules.json`) e dialog di configurazione aperta dal pulsante `btnConfigVariants`.
 - `ReportParserService.cs` — parses/pivots raw report text into UI view formats.
 - `script/svn_predictive_merge_checker.ps1` — actual SVN analysis logic, invoked as an external process.
 
 ## Architectural patterns
 - Service-oriented: each concern behind a small `I*` interface with one concrete implementation
-  (`IConfigService`, `ISvnService`, `IPowerShellRunnerService`, `IReportParserService`).
+  (`IConfigService`, `IVariantConfigService`, `ISvnService`, `IPowerShellRunnerService`, `IReportParserService`).
 - No DI container: services are `new`'d in `Form1`'s constructor and passed via constructor injection to
   orchestration classes (e.g. `SvnCheckerHelper(ISvnService)`). Follow this pattern for new services.
 - External processes (`svn.exe`, `powershell.exe`) always via `Process` with `UseShellExecute = false`,
@@ -52,7 +53,7 @@ main app plus the `SVNMergeCheckerUI.Tests` test project.
 
 ## Build/test
 - Build: `dotnet build SVNMergeCheckerUI.csproj` (or open `SVNMergeCheckerUI.sln` in Visual Studio).
-- Automated tests: `dotnet test` (progetto `SVNMergeCheckerUI.Tests`, 53 test unitari e golden-file).
+- Automated tests: `dotnet test` (progetto `SVNMergeCheckerUI.Tests`, 73 casi di test unitari e golden-file).
 
 ## Constraints for future changes
 - Windows-only WinForms app (`net8.0-windows7.0`); do not introduce cross-platform UI assumptions.

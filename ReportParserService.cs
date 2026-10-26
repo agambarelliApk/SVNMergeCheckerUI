@@ -25,6 +25,9 @@ namespace SVNMergeCheckerUI
         private const string Header2 = "2. STRUTTURA AD ALBERO DELLE REVISIONI - DIPENDENZE";
         private const string Header3 = "3. FILE COINVOLTI PER OGNI REVISIONE DA MERGIARE";
 
+        // Header delle sezioni di verifica parallela: "***** <Label> *****" (label configurabile).
+        private static readonly Regex VariantHeaderRegex = new(@"^\*{5}\s+.+?\s+\*+$", RegexOptions.Compiled);
+
         // Matches a revision number anywhere in a line: r12345 or bare 12345 at start
         private static readonly Regex RevisionPattern =
             new(@"(?<!\d)r?(?<rev>\d{5,7})(?!\d)", RegexOptions.Compiled);
@@ -268,7 +271,7 @@ namespace SVNMergeCheckerUI
                 var variantHeaderIdx = rawBlockLines.FindIndex(l =>
                 {
                     var t = l.Trim();
-                    return t.StartsWith("*****") && (t.Contains("TributiNet") || t.Contains("Generale"));
+                    return VariantHeaderRegex.IsMatch(t);
                 });
 
                 List<string> blockLines;

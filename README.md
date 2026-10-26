@@ -34,7 +34,7 @@ uno strumento visuale per prevenire merge incompleti o inconsistenti prima di es
 - Analisi ciclica delle **dipendenze tra revisioni** basata sui file effettivamente modificati, estesa sia alle revisioni **precedenti** che a quelle **successive** nella cronologia SVN.
 - Controllo capillare delle **collisioni di codice** analizzando i range di righe degli hunk nei diff SVN (`svn diff`) con margine di tolleranza di 3 righe, per rilevare reali sovrapposizioni tra modifiche.
 - Ispezione dello storico con opzione `--stop-on-copy` nelle interrogazioni `svn log` per non trascinare le revisioni dei branch antenati durante l'analisi tra rami candidate e release.
-- Verifica parallela opzionale (**Includi**) su varianti/rami collegati (*TributiNet*, *Generale*, *Tutto*) per verificare lo stato di merge delle issue anche sui repository correlati.
+- Verifica parallela opzionale (**Includi**) su varianti/rami collegati per verificare lo stato di merge delle issue anche sui repository correlati. Le voci della combo sono **configurabili** tramite il file `parallel_modules.json` e la dialog dedicata (pulsante ⚙); di default è presente solo *Generale*.
 - Rilevamento automatico delle revisioni **già mergiate** tramite `svn mergeinfo`.
 - Classificazione visiva dettagliata tramite simboli e colori:
   - 🟢 **Verde (`[✔ ]` / `[✔]`)** — `Mergiato` (revisione già mergiata) oppure `DipendenzaPrecedenteMergiata` (dipendenza precedente già mergiata).
@@ -101,8 +101,10 @@ Flusso tipico di utilizzo dalla UI:
 1. Selezionare la cartella della **Working Copy** (destinazione del merge) e del **Source Repository** locale.
 2. Inserire uno o più **codici Issue** oppure una lista di **numeri di revisione** manuali.
 3. (Opzionale) Specificare le revisioni da escludere nel campo *Skip Revisions*.
-4. Avviare l'analisi tramite il pulsante di esecuzione.
-5. Consultare il report generato nelle diverse viste disponibili (Elenco Revisioni, Albero Dipendenze, File
+4. (Opzionale) Scegliere nella combo **Includi** un modulo parallelo da verificare (o *Tutto*). Per aggiungere o
+   rimuovere moduli, cliccare il pulsante **⚙** accanto alla combo (vedi sezione *Configurazione*).
+5. Avviare l'analisi tramite il pulsante di esecuzione.
+6. Consultare il report generato nelle diverse viste disponibili (Elenco Revisioni, Albero Dipendenze, File
    Coinvolti, Log Console) e, se necessario, esportarlo su file.
 
 ## Configurazione
@@ -117,11 +119,36 @@ Flusso tipico di utilizzo dalla UI:
 - **Limite massimo revisioni:** il numero massimo di nuove revisioni analizzabili in un singolo ciclo è
   configurabile tramite l'apposito controllo numerico nell'interfaccia.
 - **Timeout SVN:** configurabile dall'utente (5-600 secondi, default 60s) tramite controllo numerico dedicato, persistito nel profilo e applicato con kill automatico del processo in caso di scadenza.
-- **Verifiche parallele (Includi):** configurabile tramite combobox (*Nessuno*, *TributiNet*, *Generale*, *Tutto*) per interrogare in parallelo i rami correlati preservando l'isolamento della working copy locale.
+- **Verifiche parallele (Includi):** configurabile tramite combobox (voce vuota = nessuna verifica, i moduli configurati e *Tutto*) per interrogare in parallelo i rami correlati preservando l'isolamento della working copy locale.
+- **Moduli paralleli (`parallel_modules.json`):** file JSON accanto all'eseguibile che elenca le voci della combo *Includi*
+  (esclusi la voce vuota e *Tutto*, che sono fissi). Ogni voce ha due campi: `Label` (testo mostrato in UI e
+  nell'header del report `***** Label *****`) e `FolderName` (ultimo segmento dell'URL SVN della variante).
+
+  ```json
+  [
+    { "Label": "TributiNet", "FolderName": "tributinet" },
+    { "Label": "Generale", "FolderName": "generale" }
+  ]
+  ```
+
+  Regole applicate in lettura e in salvataggio:
+  - se il file manca o non è valido, la combo contiene solo la voce vuota e *Generale*;
+  - *Generale* viene sempre garantito e collocato in ultima posizione (non è rimovibile);
+  - la prima lettera di ogni `Label` viene portata in maiuscolo;
+  - le voci con `Label` vuota o *Tutto* vengono scartate e i duplicati (senza distinzione tra maiuscole e minuscole) rimossi;
+  - *Tutto* compare solo se le varianti sono almeno due.
+- **Configurazione dei moduli dalla UI:** il pulsante **⚙** accanto alla combo *Includi* apre la dialog *Configura moduli
+  paralleli*, che permette di aggiungere e rimuovere voci (tranne *Generale*):
+  1. indicare l'**Etichetta** (`Label`);
+  2. premere **...** e selezionare la cartella (working copy SVN) della variante: l'applicazione verifica con
+     `svn info` che la cartella sia collegata a un URL SVN e ne ricava il `FolderName` dall'ultimo segmento dell'URL;
+     se non viene trovato alcun URL compare un avviso e la cartella non può essere aggiunta;
+  3. premere **Aggiungi** (abilitato solo con etichetta e cartella verificata) e infine **OK** per salvare il file e
+     aggiornare la combo; **Annulla** non scrive nulla.
 
 ## Esecuzione dei test
 
-La solution include un progetto di test dedicato: `SVNMergeCheckerUI.Tests` (53 test automatici xUnit, tutti verdi).
+(73 casi di test automatici xUnit, tutti verdi)
 
 Per eseguire i test automatici:
 
@@ -135,6 +162,7 @@ La suite copre:
 - Algoritmi di collisione hunk e orchestrazione (`SvnCheckerHelperTests`)
 - Persistenza e validazione profili JSON (`JsonConfigServiceTests`)
 - Validazione argomenti e percorsi SVN (`SvnServiceTests`)
+- Configurazione dei moduli paralleli `parallel_modules.json` (`VariantConfigServiceTests`)
 
 ## Documentazione test
 

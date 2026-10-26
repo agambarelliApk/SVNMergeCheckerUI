@@ -80,6 +80,7 @@ Copertura attuale:
 - `ParseDiffHunkRanges_ExtractsRangesCorrectly`
 - `CheckRangeCollision_DetectsCollisionAndDisjointCorrectly`
 - `CheckRangeCollision_EmptyRanges_FallbacksToTrue`
+- `ResolveVariantUrl_ReturnsExpectedUrlOrNull` (7 casi)
 
 Nota: i flussi che richiedono `svn log`/`svn diff` reali (calcolo dei 4 stati con issue/revisioni
 effettive) non sono ancora testabili in isolamento, perché `SvnCheckerHelper` invoca direttamente
@@ -119,10 +120,30 @@ Copertura attuale:
 - `GetMergedRevisionsAsync_ReturnsEmptyList_WhenSourceUrlIsEmpty`
 - `GetMergedRevisionsAsync_ReturnsEmptyList_WhenTargetPathIsEmpty`
 
+### `VariantConfigServiceTests`
+
+File: `SVNMergeCheckerUI.Tests/VariantConfigServiceTests.cs`
+
+Scopo: verificare `JsonVariantConfigService` (file `parallel_modules.json`, voci della combo *Includi*), isolata su directory
+temporanee.
+
+Copertura attuale:
+
+- `LoadAll_ReturnsOnlyGenerale_WhenFileMissing`
+- `LoadAll_ReturnsOnlyGenerale_WhenJsonInvalid`
+- `LoadAll_AddsGenerale_WhenSingleEntryDifferent`
+- `LoadAll_DoesNotDuplicateGenerale_WhenSingleEntryIsGenerale`
+- `LoadAll_RemovesDuplicates_IgnoringTuttoAndEmpty_AndKeepsGeneraleLast`
+- `LoadAll_UsesLowercaseLabel_WhenFolderNameMissing`
+- `LoadAll_CapitalizesFirstLetterOfLabel_KeepingRestUnchanged`
+- `Save_WritesCapitalizedLabelToFile`
+- `Save_Then_LoadAll_RoundTrips_AndKeepsGeneraleLast`
+- `ExtractFolderName_ReturnsLastSegmentOrNull` (4 casi)
+
 ## Conclusione
 
 La suite di test esistente è compatibile con il progetto principale e il build della solution risulta
-corretto. Al momento sono presenti 53 test automatici, tutti verdi (`dotnet test`).
+corretto. Al momento sono presenti 73 casi di test automatici, tutti verdi (`dotnet test`).
 
 Attività future possibili: introdurre un'astrazione `IProcessRunner` iniettabile per isolare
 completamente `Process.Start` in `SvnService`/`SvnCheckerHelper` e testare così anche il flusso

@@ -19,7 +19,7 @@ Il progetto di test referenzia direttamente:
 
 - `..\SVNMergeCheckerUI.csproj`
 
-## Test presenti (53 test totali)
+## Test presenti (73 casi di test totali)
 
 ### `ReportParserServiceTests`
 
@@ -74,7 +74,7 @@ File: `SvnCheckerHelperTests.cs`
 
 Scopo: verificare i metodi di helper, algoritmi di collisione hunk e orchestrazione di `SvnCheckerHelper` con mock di `ISvnService`.
 
-Copertura attuale (6 test):
+Copertura attuale (13 casi di test):
 
 - `RunAsync_Throws_WhenRepoUrlCannotBeResolved`
 - `RunAsync_ReturnsEmptyResult_WhenNoIssuesAndNoRevisionsProvided`
@@ -82,6 +82,7 @@ Copertura attuale (6 test):
 - `ParseDiffHunkRanges_ExtractsRangesCorrectly`
 - `CheckRangeCollision_DetectsCollisionAndDisjointCorrectly`
 - `CheckRangeCollision_EmptyRanges_FallbacksToTrue`
+- `ResolveVariantUrl_ReturnsExpectedUrlOrNull` (`[Theory]`, 7 casi)
 
 ### `JsonConfigServiceTests`
 
@@ -105,7 +106,7 @@ File: `SvnServiceTests.cs`
 
 Scopo: verificare i percorsi e la validazione di `SvnService` senza invocare `svn.exe`.
 
-Copertura attuale (7 test):
+Copertura attuale (11 casi di test, alcuni `[Theory]`):
 
 - `GetSvnUrlAsync_ReturnsInputUnchanged_WhenAlreadyAUrl`
 - `GetSvnUrlAsync_ReturnsNull_WhenPathIsEmpty`
@@ -114,6 +115,25 @@ Copertura attuale (7 test):
 - `UpdateDirectoryAsync_Skips_WhenPathIsEmpty`
 - `GetMergedRevisionsAsync_ReturnsEmptyList_WhenSourceUrlIsEmpty`
 - `GetMergedRevisionsAsync_ReturnsEmptyList_WhenTargetPathIsEmpty`
+
+### `VariantConfigServiceTests`
+
+File: `VariantConfigServiceTests.cs`
+
+Scopo: verificare `JsonVariantConfigService` (file `parallel_modules.json`), isolata su cartelle temporanee.
+
+Copertura attuale (13 casi di test):
+
+- `LoadAll_ReturnsOnlyGenerale_WhenFileMissing`
+- `LoadAll_ReturnsOnlyGenerale_WhenJsonInvalid`
+- `LoadAll_AddsGenerale_WhenSingleEntryDifferent`
+- `LoadAll_DoesNotDuplicateGenerale_WhenSingleEntryIsGenerale`
+- `LoadAll_RemovesDuplicates_IgnoringTuttoAndEmpty_AndKeepsGeneraleLast`
+- `LoadAll_UsesLowercaseLabel_WhenFolderNameMissing`
+- `LoadAll_CapitalizesFirstLetterOfLabel_KeepingRestUnchanged`
+- `Save_WritesCapitalizedLabelToFile`
+- `Save_Then_LoadAll_RoundTrips_AndKeepsGeneraleLast`
+- `ExtractFolderName_ReturnsLastSegmentOrNull` (`[Theory]`, 4 casi)
 
 ## Esecuzione dei test
 

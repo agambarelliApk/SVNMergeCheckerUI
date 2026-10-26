@@ -10,30 +10,34 @@ namespace SVNMergeCheckerUI {
         // TODO: rendere configurabile da AppConfig/GUI (vedi TASKS.md).
         private const int DefaultSvnTimeoutMs = 60_000;
 
-        public SvnCheckerHelper(ISvnService svn) => _svn = svn;
+        private readonly IReadOnlyList<VariantDefinition> _variants;
+
+        public SvnCheckerHelper(ISvnService svn, IReadOnlyList<VariantDefinition>? variants = null) {
+            _svn = svn;
+            _variants = variants ?? JsonVariantConfigService.Normalize(null);
+        }
 
         // ----------------------------------------------------------------
         // Verifica parallela SVN (TributiNet/Generale)
         // ----------------------------------------------------------------
-        // Nomi delle cartelle finali di variante, cos� come vanno scritte nell'URL (minuscolo).
-        private static readonly Dictionary<string, string> VariantFolderNames =
-            new(StringComparer.OrdinalIgnoreCase) {
-                ["TributiNet"] = "tributinet",
-                ["Generale"] = "generale"
-            };
-
         // Determina quali varianti eseguire in base alla selezione "Includi" della UI.
-        private static IReadOnlyList<string> ResolveVariantLabels(string includi) => includi switch {
-            "TributiNet" => new[] { "TributiNet" },
-            "Generale" => new[] { "Generale" },
-            "Tutto" => new[] { "TributiNet", "Generale" },
-            _ => Array.Empty<string>()
-        };
+        private IReadOnlyList<string> ResolveVariantLabels(string includi) {
+            if (string.IsNullOrEmpty(includi)) return Array.Empty<string>();
+            if (string.Equals(includi, JsonVariantConfigService.TuttoLabel, StringComparison.OrdinalIgnoreCase))
+                return _variants.Select(v => v.Label).ToList();
+            return _variants
+                .Where(v => string.Equals(v.Label, includi, StringComparison.OrdinalIgnoreCase))
+                .Select(v => v.Label)
+                .ToList();
+        }
+
+        private string GetVariantFolderName(string label) =>
+            _variants.First(v => string.Equals(v.Label, label, StringComparison.OrdinalIgnoreCase)).FolderName;
 
         // Sostituisce l'ultimo segmento del path dell'URL sorgente con la cartella di variante
         // (es. "https://svnserver/.../branches/foo" + "tributinet" -> ".../branches/tributinet").
-        // Ritorna null se l'ultimo segmento gi� corrisponde alla variante richiesta: in tal caso
-        // l'elaborazione "attuale" (sull'URL base) va considerata gi� equivalente alla variante.
+        // Ritorna null se l'ultimo segmento già corrisponde alla variante richiesta: in tal caso
+        // l'elaborazione "attuale" (sull'URL base) va considerata già equivalente alla variante.
         public static string? ResolveVariantUrl(string baseUrl, string variantFolderName) {
             var trimmed = baseUrl.TrimEnd('/');
             var lastSlash = trimmed.LastIndexOf('/');
@@ -134,7 +138,7 @@ namespace SVNMergeCheckerUI {
 
             foreach (var label in variantLabels) {
                 ct.ThrowIfCancellationRequested();
-                var folderName = VariantFolderNames[label];
+                var folderName = GetVariantFolderName(label);
                 var variantUrl = ResolveVariantUrl(repoUrl, folderName);
                 if (variantUrl is null) {
                     progress.Report($"\n[-] Verifica parallela '{label}' saltata: la sorgente punta già a questa variante.");
@@ -698,7 +702,7 @@ namespace SVNMergeCheckerUI {
         // ----------------------------------------------------------------
         // Sezione 4: costruzione testo report (stesso formato PS)
         // ----------------------------------------------------------------
-        private static string BuildReportText(
+        private string BuildReportText(
             SvnCheckerParameters p,
             string repoUrl,
             Dictionary<int, RevisionInfo> details,
@@ -902,20 +906,16 @@ namespace SVNMergeCheckerUI {
         // Appende, per una data issue, le sezioni di verifica parallela SVN (TributiNet/Generale)
         // richieste tramite SvnCheckerParameters.Includi. Mantiene lo stesso formato di riga usato
         // per le revisioni "standard" (=> STATO rev del data [autore] : messaggio).
-        private static readonly string[] VariantOrder = { "TributiNet", "Generale" };
-
-        private static void AppendVariantSections(
+        private void AppendVariantSections(
             StringBuilder sb,
             Dictionary<string, Dictionary<string, List<RevisionInfo>>>? variantSections,
             string issue) {
             if (variantSections is null || variantSections.Count == 0) return;
 
-            foreach (var label in VariantOrder) {
+            foreach (var label in _variants.Select(v => v.Label)) {
                 if (!variantSections.TryGetValue(label, out var byIssue)) continue;
 
-                var header = label == "TributiNet"
-                    ? "  ***** TributiNet *****"
-                    : "  ***** Generale *****";
+                var header = $"  ***** {label} *****";
                 sb.AppendLine();
                 sb.AppendLine(header);
 

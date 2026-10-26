@@ -140,6 +140,13 @@ Legenda priorità:
   - Aggiornato `ReportParserService.ParseRevisioniLines` per gestire le sezioni di coda delle varianti e la corretta formattazione/colorazione delle righe.
   - Aggiunto test `ParseRevisioniLines_WithVariantSections_RendersVariantHeadersAndRevisionsCorrectly` in `ReportParserServiceTests` (suite completa a 53/53 test verdi).
   - ? Completed and validated on 2026-09-30
+- [x] **Moduli paralleli (`cmbIncludi`) configurabili da `parallel_modules.json` + dialog di configurazione**:
+  - Nuovo servizio `IVariantConfigService`/`JsonVariantConfigService` (`VariantConfig.cs`): lettura/salvataggio di `parallel_modules.json` con `Normalize` (default solo `Generale`, `Generale` sempre presente e ultimo, prima lettera della label in maiuscolo, duplicati e voci vuote/`Tutto` scartati).
+  - `SvnCheckerHelper` riceve la lista di `VariantDefinition` (non più hard-coded `TributiNet`/`Generale`); `ReportParserService` riconosce gli header di variante con `VariantHeaderRegex`.
+  - Nuovo pulsante `btnConfigVariants` (ingranaggio) di fianco a `cmbIncludi` e dialog `VariantConfigDialog`: la cartella scelta viene validata con `ISvnService.GetSvnUrlAsync`, il `FolderName` deriva dall'URL SVN; `Generale` non rimovibile; `Aggiungi` abilitato solo con label e cartella verificata.
+  - Aggiunti test in `VariantConfigServiceTests` e `ResolveVariantUrl` in `SvnCheckerHelperTests` (suite a 73/73 casi verdi).
+  - Documentazione aggiornata: `README.md`, `flow.md`, `TESTS.md`, `docs/Presentation.md`, `SVNMergeCheckerUI.Tests/README.md`, `.github/copilot-instructions.md`.
+  - ? Completed and validated on 2026-10-26
 - ?? **Estrarre in un piccolo helper/ViewModel la costruzione di `SvnCheckerParameters`**
   (righe 208-234), oggi costruita inline nel click handler leggendo direttamente i controlli WinForms.
 

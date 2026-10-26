@@ -33,6 +33,7 @@
             btnBrowseSourceRepo = new Button();
             lblIncludi = new Label();
             cmbIncludi = new ComboBox();
+            btnConfigVariants = new Button();
             btnSvnConnect = new Button();
             btnSvnUpdate = new Button();
             grpConfig = new GroupBox();
@@ -89,6 +90,7 @@
             grpDirectory.Controls.Add(btnBrowseSourceRepo);
             grpDirectory.Controls.Add(lblIncludi);
             grpDirectory.Controls.Add(cmbIncludi);
+            grpDirectory.Controls.Add(btnConfigVariants);
             grpDirectory.Controls.Add(btnSvnConnect);
             grpDirectory.Controls.Add(btnSvnUpdate);
             grpDirectory.Location = new Point(8, 8);
@@ -157,7 +159,7 @@
             lblIncludi.Size = new Size(60, 28);
             lblIncludi.TabIndex = 6;
             lblIncludi.Text = "Includi:";
-            lblIncludi.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
+            lblIncludi.TextAlign = ContentAlignment.MiddleLeft;
             // 
             // cmbIncludi
             // 
@@ -167,9 +169,20 @@
             cmbIncludi.Size = new Size(110, 27);
             cmbIncludi.TabIndex = 7;
             // 
+            // btnConfigVariants
+            // 
+            btnConfigVariants.Font = new Font("Segoe UI Symbol", 10F);
+            btnConfigVariants.Location = new Point(179, 89);
+            btnConfigVariants.Name = "btnConfigVariants";
+            btnConfigVariants.Size = new Size(29, 29);
+            btnConfigVariants.TabIndex = 10;
+            btnConfigVariants.Text = "⚙";
+            btnConfigVariants.UseVisualStyleBackColor = true;
+            btnConfigVariants.Click += btnConfigVariants_Click;
+            // 
             // btnSvnConnect
             // 
-            btnSvnConnect.Location = new Point(190, 90);
+            btnSvnConnect.Location = new Point(216, 90);
             btnSvnConnect.Name = "btnSvnConnect";
             btnSvnConnect.Size = new Size(130, 28);
             btnSvnConnect.TabIndex = 8;
@@ -178,7 +191,7 @@
             // 
             // btnSvnUpdate
             // 
-            btnSvnUpdate.Location = new Point(328, 90);
+            btnSvnUpdate.Location = new Point(354, 90);
             btnSvnUpdate.Name = "btnSvnUpdate";
             btnSvnUpdate.Size = new Size(130, 28);
             btnSvnUpdate.TabIndex = 9;
@@ -548,6 +561,7 @@
         private ComboBox cmbIncludi;
         private Button btnSvnConnect;
         private Button btnSvnUpdate;
+        private Button btnConfigVariants;
 
         // Config section
         private GroupBox grpConfig;
