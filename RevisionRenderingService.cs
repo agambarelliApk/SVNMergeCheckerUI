@@ -53,15 +53,22 @@ namespace SVNMergeCheckerUI
             string? currentRev = null;
             List<(string revLabel, List<string> files)>? currentIssueRevs = null;
             List<string>? currentRevFiles = null;
+            // Revisioni di dipendenza (non dirette) per issue: solo queste, se già mergiate, vengono nascoste
+            var dependencyRevKeys = new HashSet<(string issueLabel, string revLabel)>();
+            var inOrphanSection = false;
 
             foreach (var rawLine in rawSection.Split('\n'))
             {
                 var line = rawLine.TrimEnd('\r');
                 var trimmed = line.TrimStart();
 
-                // Separatore di sotto-gruppo "--- Revisioni senza issue diretta ---": ignorato
+                // Separatore di sotto-gruppo "--- Revisioni senza issue diretta ---": ignorato,
+                // ma le revisioni successive sono dipendenze dell'issue
                 if (trimmed.StartsWith("---") && trimmed.EndsWith("---"))
+                {
+                    inOrphanSection = true;
                     continue;
+                }
 
                 var normalized = trimmed.Trim('=', ' ');
                 if (normalized.StartsWith("[") && normalized.EndsWith("]"))
@@ -76,6 +83,7 @@ namespace SVNMergeCheckerUI
                     currentIssueRevs = new List<(string, List<string>)>();
                     currentRev = null;
                     currentRevFiles = null;
+                    inOrphanSection = IsDependencyOnlyBlock(normalized);
                 }
                 else if (trimmed.StartsWith(">") && trimmed.Contains("REVISIONE"))
                 {
@@ -88,6 +96,8 @@ namespace SVNMergeCheckerUI
                         string.Empty).TrimEnd(':', ' ').Trim();
                     currentRev = _reportParser.NormalizeRevisionText(revText);
                     currentRevFiles = new List<string>();
+                    if (inOrphanSection && currentIssue != null)
+                        dependencyRevKeys.Add((currentIssue, currentRev));
                 }
                 else if (trimmed.StartsWith("-") && currentRevFiles != null)
                 {
@@ -151,7 +161,8 @@ namespace SVNMergeCheckerUI
 
                         var revNodes = issueToRevs[issueLabel]
                             .Select(rev => MakeRevisionMarkerNode(rev, revisionStates, issueStates, isMarkerHeader: true, indent: "    "))
-                            .Where(node => node.State != RevisionDisplayState.DipendenzaPrecedenteMergiata)
+                            .Where(node => !(node.State == RevisionDisplayState.DipendenzaPrecedenteMergiata
+                                             && dependencyRevKeys.Contains((issueLabel, node.Label))))
                             .ToList();
 
                         if (revNodes.Count > 0)
@@ -181,7 +192,8 @@ namespace SVNMergeCheckerUI
 
                     var revNodes = revisions
                         .Select(r => MakeRevisionMarkerNode(r.revLabel, revisionStates, issueStates, isMarkerHeader: true, indent: "", files: r.files))
-                        .Where(node => node.State != RevisionDisplayState.DipendenzaPrecedenteMergiata)
+                        .Where(node => !(node.State == RevisionDisplayState.DipendenzaPrecedenteMergiata
+                                         && dependencyRevKeys.Contains((issueLabel, node.Label))))
                         .ToList();
 
                     if (revNodes.Count > 0)
@@ -195,6 +207,14 @@ namespace SVNMergeCheckerUI
             }
 
             return new FileCoinvoltiModel(roots);
+        }
+
+        private static bool IsDependencyOnlyBlock(string issueLabel)
+        {
+            var key = issueLabel.Trim('[', ']', ' ');
+            return key.StartsWith("Revisioni di dipendenza senza issue diretta", StringComparison.OrdinalIgnoreCase) ||
+                   key.StartsWith("Revisioni al di fuori delle issue", StringComparison.OrdinalIgnoreCase) ||
+                   key.StartsWith("Elaborazione senza Issue", StringComparison.OrdinalIgnoreCase);
         }
 
         private FileCoinvoltiModel BuildLegacyModel(

@@ -414,9 +414,11 @@ public class ReportParserServiceTests
         var section =
             "=== [ISSUE-VALID] ===\n" +
             "     => 10001 del 01/01/2024 10:00 [mario] : commit 1\n" +
-            "     => 10002 del 01/01/2024 09:00 [mario] : commit 2 (merged dep)\n" +
+            "  --- Revisioni senza issue diretta ---\n" +
+            "   => 10002 del 01/01/2024 09:00 [mario] : commit 2 (merged dep)\n" +
             "=== [ISSUE-MERGED-ONLY] ===\n" +
-            "     => 10003 del 01/01/2024 08:00 [mario] : commit 3 (merged dep)\n";
+            "  --- Revisioni senza issue diretta ---\n" +
+            "   => 10003 del 01/01/2024 08:00 [mario] : commit 3 (merged dep)\n";
 
         var states = new Dictionary<int, RevisionDisplayState>
         {

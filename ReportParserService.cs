@@ -143,6 +143,13 @@ namespace SVNMergeCheckerUI
                 StringComparer.OrdinalIgnoreCase);
         }
 
+        // Blocchi del report che contengono solo revisioni di dipendenza (nessuna issue diretta).
+        private static bool IsDependencyOnlyBlock(string? issueKey) =>
+            issueKey == null ||
+            issueKey.StartsWith("Revisioni di dipendenza senza issue diretta", StringComparison.OrdinalIgnoreCase) ||
+            issueKey.StartsWith("Revisioni al di fuori delle issue", StringComparison.OrdinalIgnoreCase) ||
+            issueKey.StartsWith("Elaborazione senza Issue", StringComparison.OrdinalIgnoreCase);
+
         private static int GetMergeStatePriority(RevisionDisplayState? state) => state switch
         {
             RevisionDisplayState.DaMergiareDiretta => 1,
@@ -310,12 +317,19 @@ namespace SVNMergeCheckerUI
                     issueTree = defTree;
                 }
 
+                // Le revisioni dopo il separatore "--- Revisioni senza issue diretta ---" sono dipendenze
+                // (non collegate direttamente all'issue); quelle prima sono dirette e vanno sempre mostrate.
+                var inOrphanSection = IsDependencyOnlyBlock(issueKey);
+
                 foreach (var line in blockLines)
                 {
                     var trimmed = line.Trim();
 
+                    var isSeparator = trimmed.StartsWith("---") && trimmed.EndsWith("---");
+                    if (isSeparator) inOrphanSection = true;
+
                     // Skip the separator "--- Revisioni senza issue diretta ---" when tree is present
-                    if (issueTree != null && trimmed.StartsWith("---") && trimmed.EndsWith("---"))
+                    if (issueTree != null && isSeparator)
                         continue;
 
                     var match = RevisionPattern.Match(line);
@@ -334,7 +348,7 @@ namespace SVNMergeCheckerUI
                             state = globalState;
                         }
 
-                        if (state == RevisionDisplayState.DipendenzaPrecedenteMergiata)
+                        if (state == RevisionDisplayState.DipendenzaPrecedenteMergiata && inOrphanSection)
                             continue;
 
                         var clean = Regex.Replace(trimmed, @"^(?:=>|==|>)\s*", "");
